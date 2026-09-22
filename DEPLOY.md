@@ -40,15 +40,12 @@ dig +short tasks.chrisdegroot.ca
 
 ## 3. Get the code onto the box
 
-This repo has no git remote yet. Easiest options:
-
-- **Push to a private GitHub repo**, then `git clone` it on the box.
-- **Or copy directly** from this machine:
-
-  ```bash
-  rsync -az --exclude .venv --exclude .git --exclude '*.db' \
-    /Users/ctdegroot/task-queue/ you@box:/opt/task-queue/
-  ```
+```bash
+sudo mkdir -p /opt/task-queue
+sudo chown "$USER" /opt/task-queue
+git clone https://github.com/DeGrootResearchGroup/task-queue.git /opt/task-queue
+cd /opt/task-queue
+```
 
 ## 4. Configure secrets on the box
 

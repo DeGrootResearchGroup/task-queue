@@ -57,3 +57,8 @@ After changing `app/models.py`, generate a migration:
 uv run alembic revision --autogenerate -m "describe the change"
 uv run alembic upgrade head
 ```
+
+## Deployment
+
+See [`DEPLOY.md`](DEPLOY.md) for deploying to a Linux box behind Caddy with
+Docker Compose (currently set up for `tasks.chrisdegroot.ca`).

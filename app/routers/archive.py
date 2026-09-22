@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import or_, select
@@ -51,7 +51,14 @@ def archive(
             pass
     if date_to:
         try:
-            stmt = stmt.where(RequestModel.created_at <= date.fromisoformat(date_to))
+            # created_at is a DateTime column; comparing it against a bare
+            # date (which binds as e.g. '2026-09-22') is a lexicographic
+            # string comparison in SQLite, and any timestamp later that same
+            # day ('2026-09-22 14:30:...') sorts as greater than the bare
+            # date — silently excluding the entire target day. Using the
+            # last instant of that day makes the filter genuinely inclusive.
+            end_of_day = datetime.combine(date.fromisoformat(date_to), datetime.max.time())
+            stmt = stmt.where(RequestModel.created_at <= end_of_day)
         except ValueError:
             pass
 

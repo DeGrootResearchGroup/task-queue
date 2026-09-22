@@ -7,6 +7,7 @@ an errors dict than by catching a ValidationError.
 """
 
 from dataclasses import dataclass, field
+from datetime import date
 
 MAX_NAME_LEN = 200
 MAX_EMAIL_LEN = 320
@@ -72,6 +73,18 @@ def validate_submission(data: SubmissionInput) -> dict[str, str]:
 
     if data.request_class not in ("quick", "long"):
         errors["request_class"] = "Please select whether this is quick or takes longer."
+
+    if data.desired_completion_date:
+        try:
+            date.fromisoformat(data.desired_completion_date)
+        except ValueError:
+            # Guards against app/routers/public.py's later unconditional
+            # date.fromisoformat() call, which has no try/except of its own —
+            # a malformed value reaching that point crashes with an
+            # unhandled 500 instead of a normal field validation error. The
+            # <input type="date"> constrains this in a browser, but this is
+            # a public, unauthenticated POST endpoint reachable directly.
+            errors["desired_completion_date"] = "Enter a valid date."
 
     if data.desired_completion_date and not data.desired_date_reason.strip():
         errors["desired_date_reason"] = "Please explain why this date matters."

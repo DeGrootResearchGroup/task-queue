@@ -3,12 +3,20 @@ notification with the right recipient/content — patched at app.email.send_emai
 (the transport boundary) so no real network call happens, but everything
 above that (route wiring, notifications.py's message composition, the
 db.refresh-after-commit fix) runs for real.
+
+Every test patches send_email around its ENTIRE body, not just the action
+being asserted on — with email enabled, setup steps like submit_request()
+also trigger a real notify_requester_received() call, and leaving that
+unpatched means a genuine (if doomed-to-fail) network connection attempt to
+smtp.gmail.com on every test run. mock_send.reset_mock() is used right
+before the action under test so setup-call noise doesn't affect the
+assertions.
 """
 
 import re
 from unittest.mock import patch
 
-from tests.conftest import login, submit_request
+from tests.conftest import antispam_field, login, submit_request
 
 
 def _csrf_from(html: str) -> str:
@@ -70,13 +78,14 @@ def test_no_smtp_connection_attempted_when_not_configured(client):
 
 def test_accept_notifies_requester(client, monkeypatch):
     _enable_email(monkeypatch, owner_email="")
-    login(client)
-    submit_request(client, title="Needs acceptance", requester_email="carol@example.com")
-    req_id = _request_id_from_dashboard(client, "Needs acceptance")
-
-    detail = client.get(f"/requests/{req_id}")
-    csrf = _csrf_from(detail.text)
     with patch("app.notifications.send_email") as mock_send:
+        login(client)
+        submit_request(client, title="Needs acceptance", requester_email="carol@example.com")
+        req_id = _request_id_from_dashboard(client, "Needs acceptance")
+
+        detail = client.get(f"/requests/{req_id}")
+        csrf = _csrf_from(detail.text)
+        mock_send.reset_mock()
         client.post(f"/requests/{req_id}/accept", data={"csrf_token": csrf}, follow_redirects=False)
 
     mock_send.assert_called_once()
@@ -86,13 +95,14 @@ def test_accept_notifies_requester(client, monkeypatch):
 
 def test_decline_notifies_requester_with_reason(client, monkeypatch):
     _enable_email(monkeypatch, owner_email="")
-    login(client)
-    submit_request(client, title="Needs decline", requester_email="dave@example.com")
-    req_id = _request_id_from_dashboard(client, "Needs decline")
-
-    detail = client.get(f"/requests/{req_id}")
-    csrf = _csrf_from(detail.text)
     with patch("app.notifications.send_email") as mock_send:
+        login(client)
+        submit_request(client, title="Needs decline", requester_email="dave@example.com")
+        req_id = _request_id_from_dashboard(client, "Needs decline")
+
+        detail = client.get(f"/requests/{req_id}")
+        csrf = _csrf_from(detail.text)
+        mock_send.reset_mock()
         client.post(
             f"/requests/{req_id}/decline",
             data={"csrf_token": csrf, "reason": "Not in scope"},
@@ -106,13 +116,14 @@ def test_decline_notifies_requester_with_reason(client, monkeypatch):
 
 def test_request_info_notifies_requester_with_question(client, monkeypatch):
     _enable_email(monkeypatch, owner_email="")
-    login(client)
-    submit_request(client, title="Needs info", requester_email="erin@example.com")
-    req_id = _request_id_from_dashboard(client, "Needs info")
-
-    detail = client.get(f"/requests/{req_id}")
-    csrf = _csrf_from(detail.text)
     with patch("app.notifications.send_email") as mock_send:
+        login(client)
+        submit_request(client, title="Needs info", requester_email="erin@example.com")
+        req_id = _request_id_from_dashboard(client, "Needs info")
+
+        detail = client.get(f"/requests/{req_id}")
+        csrf = _csrf_from(detail.text)
+        mock_send.reset_mock()
         client.post(
             f"/requests/{req_id}/request-info",
             data={"csrf_token": csrf, "question": "What is the target venue?"},
@@ -126,13 +137,14 @@ def test_request_info_notifies_requester_with_question(client, monkeypatch):
 
 def test_complete_notifies_requester(client, monkeypatch):
     _enable_email(monkeypatch, owner_email="")
-    login(client)
-    submit_request(client, title="Needs completion", requester_email="frank@example.com", request_class="quick")
-    req_id = _request_id_from_dashboard(client, "Needs completion")
-
-    detail = client.get(f"/requests/{req_id}")
-    csrf = _csrf_from(detail.text)
     with patch("app.notifications.send_email") as mock_send:
+        login(client)
+        submit_request(client, title="Needs completion", requester_email="frank@example.com", request_class="quick")
+        req_id = _request_id_from_dashboard(client, "Needs completion")
+
+        detail = client.get(f"/requests/{req_id}")
+        csrf = _csrf_from(detail.text)
+        mock_send.reset_mock()
         client.post(f"/requests/{req_id}/complete", data={"csrf_token": csrf}, follow_redirects=False)
 
     mock_send.assert_called_once()
@@ -142,24 +154,25 @@ def test_complete_notifies_requester(client, monkeypatch):
 
 def test_requester_response_notifies_owner(client, monkeypatch):
     _enable_email(monkeypatch, owner_email="owner-inbox@example.com")
-    login(client)
-    tracking_url = submit_request(client, title="Roundtrip", requester_email="grace@example.com")
-    req_id = _request_id_from_dashboard(client, "Roundtrip")
-
-    detail = client.get(f"/requests/{req_id}")
-    csrf = _csrf_from(detail.text)
-    client.post(
-        f"/requests/{req_id}/request-info",
-        data={"csrf_token": csrf, "question": "Which dataset?"},
-        follow_redirects=False,
-    )
-
-    track = client.get(tracking_url)
-    csrf2 = _csrf_from(track.text)
     with patch("app.notifications.send_email") as mock_send:
+        login(client)
+        tracking_url = submit_request(client, title="Roundtrip", requester_email="grace@example.com")
+        req_id = _request_id_from_dashboard(client, "Roundtrip")
+
+        detail = client.get(f"/requests/{req_id}")
+        csrf = _csrf_from(detail.text)
+        client.post(
+            f"/requests/{req_id}/request-info",
+            data={"csrf_token": csrf, "question": "Which dataset?"},
+            follow_redirects=False,
+        )
+
+        track = client.get(tracking_url)
+        csrf2 = _csrf_from(track.text)
+        mock_send.reset_mock()
         client.post(
             f"{tracking_url}/respond",
-            data={"csrf_token": csrf2, "response": "The 2024 dataset."},
+            data={**antispam_field(), "csrf_token": csrf2, "response": "The 2024 dataset."},
             follow_redirects=False,
         )
 

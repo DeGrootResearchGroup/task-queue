@@ -1,7 +1,7 @@
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -40,6 +40,15 @@ class EventType(str, enum.Enum):
 
 class Request(Base):
     __tablename__ = "requests"
+    __table_args__ = (
+        # status is filtered on its own (e.g. the dashboard's "needs
+        # information" query) and combined with request_class (the
+        # dashboard's other queries, quick_session's next-action lookup,
+        # state_machine's _queued_siblings) — leading with status lets this
+        # one composite index serve both the status-only and status+class
+        # query shapes, rather than needing two separate indexes.
+        Index("ix_requests_status_request_class", "status", "request_class"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     public_number: Mapped[str] = mapped_column(String(20), unique=True, index=True)

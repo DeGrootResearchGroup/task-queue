@@ -189,6 +189,42 @@ class TestMoveToLongActions:
         assert quick.queue_position == 2
         assert existing_long.queue_position == 1
 
+    def test_renumbers_remaining_quick_siblings_after_move(self, db_session):
+        """Regression test: moving one of several queued Quick Actions to Long
+        Actions must not leave a gap in the Quick queue's positions."""
+        a = add(
+            db_session,
+            make_request(
+                request_class=RequestClass.quick,
+                status=RequestStatus.queued,
+                queue_position=1,
+                public_number="REQ-A",
+            ),
+        )
+        b = add(
+            db_session,
+            make_request(
+                request_class=RequestClass.quick,
+                status=RequestStatus.queued,
+                queue_position=2,
+                public_number="REQ-B",
+            ),
+        )
+        c = add(
+            db_session,
+            make_request(
+                request_class=RequestClass.quick,
+                status=RequestStatus.queued,
+                queue_position=3,
+                public_number="REQ-C",
+            ),
+        )
+        move_to_long_actions(db_session, b)
+        assert b.request_class == RequestClass.long
+        assert b.queue_position == 1  # bottom of the (previously empty) Long queue
+        assert a.queue_position == 1
+        assert c.queue_position == 2  # renumbered down from 3, no gap at 2
+
     def test_rejects_long_action(self, db_session):
         req = add(db_session, make_request(status=RequestStatus.queued, queue_position=1))
         with pytest.raises(TransitionError):

@@ -1,4 +1,5 @@
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -35,17 +36,26 @@ async def verify_csrf(request: Request) -> None:
 def get_app_settings(db: Session = Depends(get_db)) -> AppSettings:
     settings_row = db.get(AppSettings, 1)
     if settings_row is None:
+        # Race-safe bootstrap: this dependency runs on nearly every route, so
+        # two requests landing close together on a fresh deploy (before this
+        # row exists) can both reach this branch. A plain INSERT would have
+        # the second one raise an unhandled IntegrityError on the duplicate
+        # primary key; ON CONFLICT DO NOTHING makes the loser's insert a
+        # no-op instead, and both then just re-fetch the row the winner made.
         defaults = get_settings()
-        settings_row = AppSettings(
-            id=1,
-            owner_display_name=defaults.owner_display_name,
-            meeting_booking_url=defaults.meeting_booking_url or None,
-            meeting_booking_text=defaults.meeting_booking_text,
-            quick_action_minutes=defaults.quick_action_minutes,
-            urgency_green_days=defaults.urgency_green_days,
-            urgency_red_days=defaults.urgency_red_days,
+        db.execute(
+            sqlite_insert(AppSettings)
+            .values(
+                id=1,
+                owner_display_name=defaults.owner_display_name,
+                meeting_booking_url=defaults.meeting_booking_url or None,
+                meeting_booking_text=defaults.meeting_booking_text,
+                quick_action_minutes=defaults.quick_action_minutes,
+                urgency_green_days=defaults.urgency_green_days,
+                urgency_red_days=defaults.urgency_red_days,
+            )
+            .on_conflict_do_nothing(index_elements=["id"])
         )
-        db.add(settings_row)
         db.commit()
-        db.refresh(settings_row)
+        settings_row = db.get(AppSettings, 1)
     return settings_row

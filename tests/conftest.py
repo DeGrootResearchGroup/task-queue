@@ -84,6 +84,18 @@ def login(client) -> None:
     assert resp.status_code == 303
 
 
+def antispam_field() -> dict:
+    """A minimal, valid form_rendered_at value for tests posting to any
+    endpoint protected by app.antispam.is_spam (submit, add-information,
+    respond). MIN_FORM_FILL_SECONDS=0 in the test environment above, so the
+    exact timestamp doesn't matter as long as it's a valid float string;
+    the honeypot field is fine left absent since is_spam treats a missing
+    value the same as an empty one."""
+    from app.antispam import FORM_RENDERED_AT_FIELD, form_rendered_at_token
+
+    return {FORM_RENDERED_AT_FIELD: form_rendered_at_token()}
+
+
 def submit_request(client, **overrides) -> str:
     """Submits a request as a requester and returns its tracking URL (/r/<token>)."""
     import re

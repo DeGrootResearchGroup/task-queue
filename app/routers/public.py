@@ -17,12 +17,12 @@ from app.models import (
     RequestEvent,
     RequestLink,
     RequestStatus,
-    RequestUpdate,
 )
 from app.notifications import notify_owner_new_request, notify_owner_requester_update, notify_requester_received
 from app.rate_limit import limiter
 from app.schemas import LinkInput, SubmissionInput, validate_submission
 from app.security import generate_access_token
+from app.state_machine import add_information as sm_add_information
 from app.state_machine import respond_to_information, withdraw
 from app.templating import render
 from app.utils import next_public_number, urgency_level
@@ -206,26 +206,35 @@ def track(
     ctx = _tracking_context(db, req, settings_row)
     ctx["csrf_token"] = get_or_create_csrf_token(request)
     ctx["settings_row"] = settings_row
+    ctx["form_rendered_at"] = form_rendered_at_token()
+    ctx["honeypot_field"] = HONEYPOT_FIELD
+    ctx["form_rendered_at_field"] = FORM_RENDERED_AT_FIELD
     return render(request, "public/track.html", ctx)
 
 
 @router.post("/r/{token}/add-information", dependencies=[Depends(verify_csrf)])
+@limiter.limit(_settings.submit_rate_limit)
 def add_information(
     token: str,
     request: Request,
     background_tasks: BackgroundTasks,
     content: str = Form(...),
+    honeypot_value: str = Form("", alias=HONEYPOT_FIELD),
+    rendered_at: str = Form("", alias=FORM_RENDERED_AT_FIELD),
     db: Session = Depends(get_db),
 ):
+    if is_spam(honeypot_value, rendered_at):
+        # Silently pretend success, same as the main submission form — don't
+        # tip off a bot that it was detected.
+        return RedirectResponse(url=f"/r/{token}", status_code=303)
+
     req = _get_request_by_token_or_404(db, token)
     if not content.strip():
         flash(request, "Please enter some information before submitting.", "error")
         return RedirectResponse(url=f"/r/{token}", status_code=303)
 
     content = content.strip()
-    db.add(RequestUpdate(request_id=req.id, author_type="requester", content=content))
-    db.add(RequestEvent(request_id=req.id, event_type=EventType.information_added))
-    req.new_information_flag = True
+    sm_add_information(db, req, content)
     db.commit()
     db.refresh(req)
 
@@ -236,13 +245,19 @@ def add_information(
 
 
 @router.post("/r/{token}/respond", dependencies=[Depends(verify_csrf)])
+@limiter.limit(_settings.submit_rate_limit)
 def respond(
     token: str,
     request: Request,
     background_tasks: BackgroundTasks,
     response: str = Form(...),
+    honeypot_value: str = Form("", alias=HONEYPOT_FIELD),
+    rendered_at: str = Form("", alias=FORM_RENDERED_AT_FIELD),
     db: Session = Depends(get_db),
 ):
+    if is_spam(honeypot_value, rendered_at):
+        return RedirectResponse(url=f"/r/{token}", status_code=303)
+
     req = _get_request_by_token_or_404(db, token)
     respond_to_information(db, req, response)
     db.commit()

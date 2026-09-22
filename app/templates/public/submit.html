@@ -87,7 +87,8 @@
 
           <div class="mb-3">
             <label for="desired_completion_date" class="form-label">Desired completion date (optional)</label>
-            <input type="date" class="form-control" id="desired_completion_date" name="desired_completion_date" value="{{ values.desired_completion_date or '' }}">
+            <input type="date" class="form-control {{ 'is-invalid' if errors.desired_completion_date }}" id="desired_completion_date" name="desired_completion_date" value="{{ values.desired_completion_date or '' }}">
+            {% if errors.desired_completion_date %}<div class="invalid-feedback">{{ errors.desired_completion_date }}</div>{% endif %}
           </div>
 
           <div class="mb-3">

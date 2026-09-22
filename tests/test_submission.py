@@ -68,6 +68,22 @@ def test_submit_requires_reason_when_date_given(client):
     assert "date" in resp.text.lower()
 
 
+def test_submit_rejects_malformed_date_instead_of_crashing(client):
+    # A direct POST can send a value the browser's <input type="date"> would
+    # never produce (e.g. from curl or a bot) — this must be a normal 422
+    # validation error, not an unhandled 500 from date.fromisoformat().
+    csrf, rendered_at = _get_submit_form_tokens(client)
+    resp = client.post(
+        "/",
+        data=_valid_payload(
+            csrf, rendered_at, desired_completion_date="not-a-date", desired_date_reason="Because reasons"
+        ),
+        follow_redirects=False,
+    )
+    assert resp.status_code == 422
+    assert "valid date" in resp.text.lower()
+
+
 def test_submit_rejects_missing_description(client):
     csrf, rendered_at = _get_submit_form_tokens(client)
     resp = client.post("/", data=_valid_payload(csrf, rendered_at, description=""), follow_redirects=False)

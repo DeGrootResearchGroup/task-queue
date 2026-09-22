@@ -18,6 +18,7 @@ from app.models import (
     RequestClass,
     RequestEvent,
     RequestStatus,
+    RequestUpdate,
 )
 
 
@@ -181,10 +182,13 @@ def respond_to_information(db: Session, req: Request, response: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Withdrawal (requester-initiated, any class) — spec §18
+# Statuses in which a request is still "open" — the requester can still
+# withdraw it or add information to it. Anything outside this set (done,
+# declined, withdrawn) is closed and shouldn't accept further requester
+# input through any route.
 # ---------------------------------------------------------------------------
 
-_WITHDRAWABLE = {
+_ACTIVE_STATUSES = {
     RequestStatus.submitted,
     RequestStatus.queued,
     RequestStatus.in_progress,
@@ -192,8 +196,13 @@ _WITHDRAWABLE = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Withdrawal (requester-initiated, any class) — spec §18
+# ---------------------------------------------------------------------------
+
+
 def withdraw(db: Session, req: Request) -> None:
-    if req.status not in _WITHDRAWABLE:
+    if req.status not in _ACTIVE_STATUSES:
         raise TransitionError("This request can no longer be withdrawn.")
     if req.status == RequestStatus.queued:
         _remove_from_queue_and_renumber(db, req)
@@ -202,6 +211,21 @@ def withdraw(db: Session, req: Request) -> None:
     req.previous_status = None
     req.previous_queue_position = None
     _log(db, req, EventType.withdrawn)
+
+
+# ---------------------------------------------------------------------------
+# Requester-provided additional information — spec §19
+# ---------------------------------------------------------------------------
+
+
+def add_information(db: Session, req: Request, content: str) -> None:
+    if req.status not in _ACTIVE_STATUSES:
+        raise TransitionError("This request is no longer active; information can't be added to it.")
+    if not content or not content.strip():
+        raise TransitionError("Additional information is required.")
+    db.add(RequestUpdate(request_id=req.id, author_type="requester", content=content.strip()))
+    req.new_information_flag = True
+    _log(db, req, EventType.information_added)
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +238,12 @@ def move_to_long_actions(db: Session, req: Request) -> None:
         raise TransitionError("Only a Quick Action can be moved to Long Actions.")
     if req.status not in (RequestStatus.queued, RequestStatus.in_progress):
         raise TransitionError("Only a Queued or In Progress Quick Action can be moved.")
+    if req.status == RequestStatus.queued:
+        # Must renumber the old (Quick) queue while req.request_class still
+        # reflects it — _remove_from_queue_and_renumber filters siblings by
+        # req.request_class, so this has to happen before it's reassigned
+        # below, or the Quick queue is left with a permanent position gap.
+        _remove_from_queue_and_renumber(db, req)
     req.request_class = RequestClass.long
     req.started_at = None
     _insert_into_queue(db, req, target_position=None)  # bottom of Long queue

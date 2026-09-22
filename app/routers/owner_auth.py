@@ -4,10 +4,12 @@ from fastapi.responses import RedirectResponse
 from app.config import get_settings
 from app.deps import get_or_create_csrf_token, verify_csrf
 from app.flash import flash
+from app.rate_limit import limiter
 from app.security import verify_password
 from app.templating import render
 
 router = APIRouter()
+_settings = get_settings()
 
 
 @router.get("/login")
@@ -19,6 +21,7 @@ def login_form(request: Request):
 
 
 @router.post("/login", dependencies=[Depends(verify_csrf)])
+@limiter.limit(_settings.login_rate_limit)
 def login_submit(
     request: Request,
     username: str = Form(...),

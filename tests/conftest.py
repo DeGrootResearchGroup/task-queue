@@ -6,6 +6,7 @@ os.environ["OWNER_USERNAME"] = "owner"
 os.environ["ENVIRONMENT"] = "test"
 os.environ["MIN_FORM_FILL_SECONDS"] = "0"
 os.environ["SUBMIT_RATE_LIMIT"] = "1000/minute"
+os.environ["LOGIN_RATE_LIMIT"] = "1000/minute"
 
 import pytest
 from sqlalchemy import create_engine

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     min_form_fill_seconds: float = 3.0
     submit_rate_limit: str = "5/hour"
 
+    # Brute-force protection on Owner login, keyed by IP
+    login_rate_limit: str = "10/minute"
+
     # Owner-facing settings defaults (overridable via /settings, stored in AppSettings row)
     owner_display_name: str = "The Owner"
     meeting_booking_url: str = ""

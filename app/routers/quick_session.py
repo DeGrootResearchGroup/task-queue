@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db import commit_and_refresh
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
 from app.models import AppSettings, Request as RequestModel, RequestClass, RequestStatus
@@ -84,9 +85,7 @@ def quick_done(
 ):
     req = _get_quick_request_or_404(db, request_id)
     complete(db, req)
-    db.commit()
-    db.refresh(req)
-    db.refresh(settings_row)
+    commit_and_refresh(db, req, settings_row)
     background_tasks.add_task(notify_requester_completed, str(request.base_url), req, settings_row)
     flash(request, f"Marked done: {req.title}", "success")
     return RedirectResponse(url="/quick-session", status_code=303)
@@ -103,9 +102,7 @@ def quick_need_info(
 ):
     req = _get_quick_request_or_404(db, request_id)
     request_information(db, req, question)
-    db.commit()
-    db.refresh(req)
-    db.refresh(settings_row)
+    commit_and_refresh(db, req, settings_row)
     background_tasks.add_task(
         notify_requester_needs_information, str(request.base_url), req, question.strip(), settings_row
     )

@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db import commit_and_refresh
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
 from app.models import AppSettings, Request as RequestModel, RequestClass, RequestStatus
@@ -121,8 +122,7 @@ def request_detail(
     req = _get_request_or_404(db, request_id)
     if req.new_information_flag:
         req.new_information_flag = False
-        db.commit()
-        db.refresh(req)
+        commit_and_refresh(db, req)
 
     csrf_token = get_or_create_csrf_token(request)
     return render(
@@ -148,9 +148,7 @@ def accept(
 ):
     req = _get_request_or_404(db, request_id)
     accept_and_queue(db, req)
-    db.commit()
-    db.refresh(req)
-    db.refresh(settings_row)
+    commit_and_refresh(db, req, settings_row)
     background_tasks.add_task(notify_requester_accepted, str(request.base_url), req, settings_row)
     flash(request, f"{req.title} accepted and added to the queue.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
@@ -167,9 +165,7 @@ def decline_request(
 ):
     req = _get_request_or_404(db, request_id)
     decline(db, req, reason)
-    db.commit()
-    db.refresh(req)
-    db.refresh(settings_row)
+    commit_and_refresh(db, req, settings_row)
     background_tasks.add_task(notify_requester_declined, str(request.base_url), req, settings_row)
     flash(request, f"{req.title} declined.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
@@ -186,9 +182,7 @@ def request_info(
 ):
     req = _get_request_or_404(db, request_id)
     request_information(db, req, question)
-    db.commit()
-    db.refresh(req)
-    db.refresh(settings_row)
+    commit_and_refresh(db, req, settings_row)
     background_tasks.add_task(
         notify_requester_needs_information, str(request.base_url), req, question.strip(), settings_row
     )
@@ -216,9 +210,7 @@ def complete_request(
 ):
     req = _get_request_or_404(db, request_id)
     complete(db, req, note)
-    db.commit()
-    db.refresh(req)
-    db.refresh(settings_row)
+    commit_and_refresh(db, req, settings_row)
     background_tasks.add_task(notify_requester_completed, str(request.base_url), req, settings_row)
     flash(request, f"{req.title} marked done.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)

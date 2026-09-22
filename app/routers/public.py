@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.antispam import FORM_RENDERED_AT_FIELD, HONEYPOT_FIELD, form_rendered_at_token, is_spam
 from app.config import get_settings
+from app.db import commit_and_refresh
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, verify_csrf
 from app.flash import flash
 from app.models import (
@@ -156,9 +157,7 @@ async def submit(
     if request_class == RequestClass.quick:
         db.add(RequestEvent(request_id=req.id, event_type=EventType.accepted))
 
-    db.commit()
-    db.refresh(req)
-    db.refresh(settings_row)
+    commit_and_refresh(db, req, settings_row)
 
     base_url = str(request.base_url)
     background_tasks.add_task(notify_requester_received, base_url, req, settings_row)
@@ -235,8 +234,7 @@ def add_information(
 
     content = content.strip()
     sm_add_information(db, req, content)
-    db.commit()
-    db.refresh(req)
+    commit_and_refresh(db, req)
 
     background_tasks.add_task(notify_owner_requester_update, str(request.base_url), req, content)
 
@@ -260,8 +258,7 @@ def respond(
 
     req = _get_request_by_token_or_404(db, token)
     respond_to_information(db, req, response)
-    db.commit()
-    db.refresh(req)
+    commit_and_refresh(db, req)
 
     background_tasks.add_task(notify_owner_requester_update, str(request.base_url), req, response.strip())
 

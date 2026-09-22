@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
 from app.models import AppSettings
@@ -15,6 +16,7 @@ def settings_form(
     request: Request,
     settings_row: AppSettings = Depends(get_app_settings),
 ):
+    email_settings = get_settings()
     return render(
         request,
         "owner/settings.html",
@@ -22,6 +24,9 @@ def settings_form(
             "owner_nav": True,
             "csrf_token": get_or_create_csrf_token(request),
             "settings_row": settings_row,
+            "email_enabled": email_settings.email_enabled,
+            "smtp_username": email_settings.smtp_username,
+            "owner_notification_email": email_settings.owner_notification_email,
         },
     )
 

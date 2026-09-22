@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,6 +8,12 @@ from sqlalchemy.orm import Session
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
 from app.models import AppSettings, Request as RequestModel, RequestClass, RequestStatus
+from app.notifications import (
+    notify_requester_accepted,
+    notify_requester_completed,
+    notify_requester_declined,
+    notify_requester_needs_information,
+)
 from app.state_machine import (
     accept_and_queue,
     complete,
@@ -133,10 +139,19 @@ def request_detail(
 
 
 @router.post("/requests/{request_id}/accept", dependencies=[Depends(verify_csrf)])
-def accept(request_id: int, request: Request, db: Session = Depends(get_db)):
+def accept(
+    request_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
+):
     req = _get_request_or_404(db, request_id)
     accept_and_queue(db, req)
     db.commit()
+    db.refresh(req)
+    db.refresh(settings_row)
+    background_tasks.add_task(notify_requester_accepted, str(request.base_url), req, settings_row)
     flash(request, f"{req.title} accepted and added to the queue.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
 
@@ -145,12 +160,17 @@ def accept(request_id: int, request: Request, db: Session = Depends(get_db)):
 def decline_request(
     request_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     reason: str = Form(...),
     db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
 ):
     req = _get_request_or_404(db, request_id)
     decline(db, req, reason)
     db.commit()
+    db.refresh(req)
+    db.refresh(settings_row)
+    background_tasks.add_task(notify_requester_declined, str(request.base_url), req, settings_row)
     flash(request, f"{req.title} declined.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
 
@@ -159,12 +179,19 @@ def decline_request(
 def request_info(
     request_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     question: str = Form(...),
     db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
 ):
     req = _get_request_or_404(db, request_id)
     request_information(db, req, question)
     db.commit()
+    db.refresh(req)
+    db.refresh(settings_row)
+    background_tasks.add_task(
+        notify_requester_needs_information, str(request.base_url), req, question.strip(), settings_row
+    )
     flash(request, "Information requested. The requester has been notified via their tracking page.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
 
@@ -182,12 +209,17 @@ def start(request_id: int, request: Request, db: Session = Depends(get_db)):
 def complete_request(
     request_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     note: str = Form(""),
     db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
 ):
     req = _get_request_or_404(db, request_id)
     complete(db, req, note)
     db.commit()
+    db.refresh(req)
+    db.refresh(settings_row)
+    background_tasks.add_task(notify_requester_completed, str(request.base_url), req, settings_row)
     flash(request, f"{req.title} marked done.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
 

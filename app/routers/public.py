@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -19,6 +19,7 @@ from app.models import (
     RequestStatus,
     RequestUpdate,
 )
+from app.notifications import notify_owner_new_request, notify_owner_requester_update, notify_requester_received
 from app.rate_limit import limiter
 from app.schemas import LinkInput, SubmissionInput, validate_submission
 from app.security import generate_access_token
@@ -80,6 +81,7 @@ def submit_form(request: Request, settings_row: AppSettings = Depends(get_app_se
 @limiter.limit(_settings.submit_rate_limit)
 async def submit(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     settings_row: AppSettings = Depends(get_app_settings),
 ):
@@ -155,6 +157,13 @@ async def submit(
         db.add(RequestEvent(request_id=req.id, event_type=EventType.accepted))
 
     db.commit()
+    db.refresh(req)
+    db.refresh(settings_row)
+
+    base_url = str(request.base_url)
+    background_tasks.add_task(notify_requester_received, base_url, req, settings_row)
+    background_tasks.add_task(notify_owner_new_request, base_url, req)
+
     return RedirectResponse(url=f"/r/{req.access_token}", status_code=303)
 
 
@@ -204,6 +213,7 @@ def track(
 def add_information(
     token: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     content: str = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -212,10 +222,15 @@ def add_information(
         flash(request, "Please enter some information before submitting.", "error")
         return RedirectResponse(url=f"/r/{token}", status_code=303)
 
-    db.add(RequestUpdate(request_id=req.id, author_type="requester", content=content.strip()))
+    content = content.strip()
+    db.add(RequestUpdate(request_id=req.id, author_type="requester", content=content))
     db.add(RequestEvent(request_id=req.id, event_type=EventType.information_added))
     req.new_information_flag = True
     db.commit()
+    db.refresh(req)
+
+    background_tasks.add_task(notify_owner_requester_update, str(request.base_url), req, content)
+
     flash(request, "Additional information added.", "success")
     return RedirectResponse(url=f"/r/{token}", status_code=303)
 
@@ -224,12 +239,17 @@ def add_information(
 def respond(
     token: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     response: str = Form(...),
     db: Session = Depends(get_db),
 ):
     req = _get_request_by_token_or_404(db, token)
     respond_to_information(db, req, response)
     db.commit()
+    db.refresh(req)
+
+    background_tasks.add_task(notify_owner_requester_update, str(request.base_url), req, response.strip())
+
     flash(request, "Response received. Your request has returned for processing.", "success")
     return RedirectResponse(url=f"/r/{token}", status_code=303)
 

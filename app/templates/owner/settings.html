@@ -47,6 +47,21 @@
         </div>
       </form>
 
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted">Email notifications</h2>
+          {% if email_enabled %}
+            <p class="mb-1"><span class="badge text-bg-success">Enabled</span> sending as <code>{{ smtp_username }}</code></p>
+            <p class="text-muted small mb-0">
+              Owner-facing pings (new submission, requester responded) are
+              {% if owner_notification_email %}sent to <code>{{ owner_notification_email }}</code>.{% else %}<strong>off</strong> — set <code>OWNER_NOTIFICATION_EMAIL</code> in <code>.env</code> to enable them.{% endif %}
+            </p>
+          {% else %}
+            <p class="mb-0"><span class="badge text-bg-secondary">Disabled</span> <span class="text-muted small">Set <code>SMTP_USERNAME</code> and <code>SMTP_PASSWORD</code> in <code>.env</code> to enable requester and Owner email notifications.</span></p>
+          {% endif %}
+        </div>
+      </div>
+
       <div class="card shadow-sm">
         <div class="card-body">
           <h2 class="h6 text-uppercase text-muted">Security</h2>

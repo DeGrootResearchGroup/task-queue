@@ -136,3 +136,33 @@ docker compose exec app rm /app/data/backup.db
 (The image doesn't include the `sqlite3` CLI, only Python's built-in
 `sqlite3` module — hence the inline script above instead of the more common
 `sqlite3 ... ".backup"` one-liner.)
+
+## Email notifications (optional)
+
+Off by default. To enable, add to `.env` on the box:
+
+```bash
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-sending-address@gmail.com
+SMTP_PASSWORD=your-16-character-app-password
+SMTP_FROM_NAME=Personal Request Queue
+OWNER_NOTIFICATION_EMAIL=you@example.com   # optional; leave blank to skip Owner-facing pings
+```
+
+`SMTP_PASSWORD` must be a Gmail **App Password**, not the account's normal
+login password — Google's SMTP relay requires it. Generate one at
+[myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+(requires 2-Step Verification to already be enabled on that Google account).
+It's 16 lowercase letters with no `$` or other special characters, so unlike
+`OWNER_PASSWORD_HASH` there's no Compose escaping gotcha here.
+
+Then `docker compose up -d` to pick up the new `.env` values (no rebuild
+needed — this is only an environment variable change). The Settings page in
+the app (`/settings`) shows whether email is currently enabled and where
+Owner-facing notifications are going, without exposing the credentials
+themselves.
+
+Requesters get emailed on: received, accepted, declined, needs-information,
+completed. The Owner (if `OWNER_NOTIFICATION_EMAIL` is set) gets emailed on:
+new submission, requester adding information or responding to a question.

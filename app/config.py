@@ -36,9 +36,26 @@ class Settings(BaseSettings):
         "Need to schedule a meeting instead? Use the normal booking process."
     )
 
+    # Email notifications (optional — spec §35 explicitly defers this to a
+    # future version). Disabled unless both smtp_username and smtp_password
+    # are set; no separate on/off flag, to keep configuration minimal.
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_name: str = "Personal Request Queue"
+    # Where Owner-facing pings (new submission, requester responded) go.
+    # Separate from smtp_username since that's the *sending* account and
+    # this may be a different inbox the Owner actually reads.
+    owner_notification_email: str = ""
+
     @property
     def cookie_secure(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_username and self.smtp_password)
 
 
 @lru_cache

@@ -24,6 +24,15 @@ services:
       - internal
     depends_on:
       - app
+    # Without this, containers inherit the host's /etc/resolv.conf, which on
+    # systemd-resolved hosts (e.g. Ubuntu) points at 127.0.0.53 — the host's
+    # local stub resolver, unreachable from inside a container. That breaks
+    # Caddy's ACME lookups to Let's Encrypt with a "connection refused" DNS
+    # error. Pinning public resolvers sidesteps the host's resolv.conf
+    # entirely.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
 networks:
   internal:

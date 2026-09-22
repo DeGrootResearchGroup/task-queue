@@ -99,8 +99,24 @@ the Owner password you hashed in step 4.
 ## Redeploying after code changes
 
 ```bash
-git pull   # or rsync again
+cd /opt/task-queue
+git pull
 docker compose up -d --build
+```
+
+This rebuilds the `app` image (Caddy is untouched unless the Caddyfile
+changed) and recreates just that container — Docker's layer caching means
+`--build` is fast when only application code changed. Database migrations
+run automatically as part of the container's startup command, so there's
+no separate migration step. Expect a few seconds of downtime while the old
+`app` container stops and the new one starts; Caddy stays up throughout and
+will just return an error for that brief window.
+
+Verify afterward:
+
+```bash
+docker compose ps
+curl -sD - -o /dev/null https://tasks.chrisdegroot.ca/
 ```
 
 The SQLite database lives in the `task_queue_data` named volume and

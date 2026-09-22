@@ -1,0 +1,23 @@
+{% macro urgency_badge(level, date_str, days_text) %}
+  {% if level == 'none' %}
+    <span class="badge badge-none">No date</span>
+  {% else %}
+    <span class="badge badge-{{ level }}">{{ date_str }} &middot; {{ days_text }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro status_label(status) %}
+  {%- if status == 'submitted' -%}Submitted
+  {%- elif status == 'queued' -%}Queued
+  {%- elif status == 'in_progress' -%}In Progress
+  {%- elif status == 'needs_information' -%}Needs Information
+  {%- elif status == 'done' -%}Completed
+  {%- elif status == 'declined' -%}Declined
+  {%- elif status == 'withdrawn' -%}Withdrawn
+  {%- else -%}{{ status }}
+  {%- endif -%}
+{% endmacro %}
+
+{% macro status_pill(status) %}
+  <span class="status-pill status-{{ status }}">{{ status_label(status) }}</span>
+{% endmacro %}

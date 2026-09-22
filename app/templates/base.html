@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Requests{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a class="brand" href="{{ '/' if not owner_nav else '/dashboard' }}">Requests</a>
+      {% if owner_nav %}
+      <nav class="main-nav">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/archive">Archive</a>
+        <a href="/settings">Settings</a>
+        <form method="post" action="/logout" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="link-button">Log out</button>
+        </form>
+      </nav>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="site-main">
+    {% if flashes %}
+      <div class="flash-stack">
+        {% for f in flashes %}
+          <div class="flash flash-{{ f.category }}">{{ f.message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

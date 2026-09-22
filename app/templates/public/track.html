@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ req.public_number }} — {{ req.title }}{% endblock %}
+{% block content %}
+  <p class="muted small">{{ req.public_number }}</p>
+  <h1>{{ req.title }}</h1>
+
+  <div class="copy-link-box">
+    <input type="text" id="tracking-link" readonly value="{{ request.base_url }}r/{{ req.access_token }}">
+    <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('tracking-link').value); this.textContent='Copied!';">Copy Private Link</button>
+  </div>
+  <p class="small muted">Save this link — it's the only way to check on this request later. It isn't emailed to you.</p>
+
+  {# ---------------- Status card ---------------- #}
+  {% if req.status.value == 'submitted' %}
+    <div class="status-card">
+      <h2>Submitted</h2>
+      <p>Your request has been received and is awaiting review.</p>
+      <p>
+        {{ submitted_count }} Long Action{{ 's' if submitted_count != 1 }} {{ 'are' if submitted_count != 1 else 'is' }} currently awaiting review.<br>
+        {{ queued_count }} Long Action{{ 's' if queued_count != 1 }} {{ 'have' if queued_count != 1 else 'has' }} been accepted and {{ 'are' if queued_count != 1 else 'is' }} currently queued.
+      </p>
+      <p class="small muted">If your request is accepted, its queue position will appear here.</p>
+    </div>
+
+  {% elif req.status.value == 'queued' and req.request_class.value == 'long' %}
+    <div class="status-card">
+      <h2>Queued</h2>
+      <p>Your request has been accepted.</p>
+      <p><strong>Position: {{ req.queue_position }} of {{ queue_total }}</strong></p>
+      <p class="small muted">Queue positions can change as priorities and external deadlines change.</p>
+    </div>
+
+  {% elif req.status.value == 'queued' and req.request_class.value == 'quick' %}
+    <div class="status-card">
+      <h2>Queued</h2>
+      <p>This is a Quick Action and will be processed in batch alongside other quick requests.</p>
+    </div>
+
+  {% elif req.status.value == 'in_progress' %}
+    <div class="status-card">
+      <h2>In Progress</h2>
+      <p>Work on this request is currently underway.</p>
+    </div>
+
+  {% elif req.status.value == 'needs_information' %}
+    <div class="status-card needs-info">
+      <h2>Action Required</h2>
+      <p><strong>Additional information is needed before this request can continue.</strong></p>
+      {% if open_question %}
+        <p>{{ open_question.owner_question }}</p>
+        <p class="small muted">Requested {{ open_question.requested_at.strftime('%B %-d, %Y') }}</p>
+      {% endif %}
+      <form method="post" action="/r/{{ req.access_token }}/respond">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field">
+          <label for="response">Your response</label>
+          <textarea id="response" name="response" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Send Response</button>
+      </form>
+    </div>
+
+  {% elif req.status.value == 'done' %}
+    <div class="status-card done">
+      <h2>Completed</h2>
+      <p>Completed {{ req.completed_at.strftime('%B %-d, %Y') if req.completed_at else '' }}.</p>
+      {% if req.completion_note %}<p>{{ req.completion_note }}</p>{% endif %}
+    </div>
+
+  {% elif req.status.value == 'declined' %}
+    <div class="status-card">
+      <h2>Declined</h2>
+      {% if req.decline_reason %}<p>{{ req.decline_reason }}</p>{% endif %}
+    </div>
+
+  {% elif req.status.value == 'withdrawn' %}
+    <div class="status-card">
+      <h2>Withdrawn</h2>
+      <p>You withdrew this request{{ ' on ' + req.withdrawn_at.strftime('%B %-d, %Y') if req.withdrawn_at else '' }}.</p>
+    </div>
+  {% endif %}
+
+  {# ---------------- Original request ---------------- #}
+  <div class="card">
+    <div class="field">
+      <label>What was requested</label>
+      <div style="white-space: pre-wrap;">{{ req.description }}</div>
+    </div>
+    {% if req.links %}
+    <div class="field">
+      <label>Supporting links</label>
+      <ul class="table-links">
+        {% for link in req.links %}
+          <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label or link.url }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    {% if req.additional_context %}
+    <div class="field">
+      <label>Additional context</label>
+      <div style="white-space: pre-wrap;">{{ req.additional_context }}</div>
+    </div>
+    {% endif %}
+    {% if req.desired_completion_date %}
+    <div class="field">
+      <label>Desired completion date</label>
+      <div>{{ req.desired_completion_date.strftime('%B %-d, %Y') }}</div>
+      {% if req.desired_date_reason %}<div class="help">{{ req.desired_date_reason }}</div>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if req.updates %}
+  <div class="card">
+    <h2>Additional information</h2>
+    {% for u in req.updates %}
+      <div class="field">
+        <label>{{ u.created_at.strftime('%B %-d, %Y') }} &mdash; {{ 'You' if u.author_type == 'requester' else settings_row.owner_display_name if settings_row else 'Owner' }}</label>
+        <div style="white-space: pre-wrap;">{{ u.content }}</div>
+      </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if req.status.value not in ('done', 'declined', 'withdrawn') %}
+  <div class="card">
+    <h2>Requester actions</h2>
+    <details>
+      <summary class="btn" role="button">Add information</summary>
+      <form method="post" action="/r/{{ req.access_token }}/add-information" class="card" style="margin-top:0.5rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="field">
+          <label for="content">Additional information</label>
+          <textarea id="content" name="content" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Add</button>
+      </form>
+    </details>
+    <details style="margin-top:0.6rem;">
+      <summary class="btn" role="button">Withdraw request</summary>
+      <form method="post" action="/r/{{ req.access_token }}/withdraw" class="card" style="margin-top:0.5rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <p class="small">Withdrawing removes this request from active work. Its history and this tracking page remain available.</p>
+        <label class="checkbox-field">
+          <input type="checkbox" name="confirm" required>
+          <span>Yes, withdraw this request.</span>
+        </label>
+        <button type="submit" class="btn btn-danger" style="margin-top:0.6rem;">Confirm Withdraw</button>
+      </form>
+    </details>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Activity</h2>
+    <ul class="activity-list">
+      {% for event in req.events|reverse %}
+        {% if event.event_type.value != 'reordered' %}
+          <li><span class="activity-date">{{ event.created_at.strftime('%b %-d') }}</span>{{ event.event_type.value.replace('_', ' ')|capitalize }}</li>
+        {% endif %}
+      {% endfor %}
+    </ul>
+  </div>
+{% endblock %}

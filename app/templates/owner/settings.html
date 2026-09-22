@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+  <h1>Settings</h1>
+
+  <form method="post" action="/settings" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <div class="field">
+      <label for="owner_display_name">Display name</label>
+      <input type="text" id="owner_display_name" name="owner_display_name" value="{{ settings_row.owner_display_name }}" required>
+    </div>
+
+    <div class="field">
+      <label for="meeting_booking_url">Meeting / booking URL</label>
+      <input type="text" id="meeting_booking_url" name="meeting_booking_url" value="{{ settings_row.meeting_booking_url or '' }}">
+      <div class="help">Shown to requesters who should be scheduling a meeting instead of submitting a request.</div>
+    </div>
+
+    <div class="field">
+      <label for="meeting_booking_text">Meeting / booking explanatory text</label>
+      <textarea id="meeting_booking_text" name="meeting_booking_text">{{ settings_row.meeting_booking_text or '' }}</textarea>
+    </div>
+
+    <div class="field">
+      <label for="quick_action_minutes">Quick Action threshold (minutes)</label>
+      <input type="number" id="quick_action_minutes" name="quick_action_minutes" min="1" value="{{ settings_row.quick_action_minutes }}" required>
+    </div>
+
+    <div class="field">
+      <label for="urgency_green_days">Green threshold (days remaining, above this)</label>
+      <input type="number" id="urgency_green_days" name="urgency_green_days" min="0" value="{{ settings_row.urgency_green_days }}" required>
+    </div>
+
+    <div class="field">
+      <label for="urgency_red_days">Red threshold (days remaining, at or below this / overdue)</label>
+      <input type="number" id="urgency_red_days" name="urgency_red_days" min="0" value="{{ settings_row.urgency_red_days }}" required>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save Settings</button>
+  </form>
+
+  <div class="card">
+    <h2>Security</h2>
+    <p class="muted small">The Owner password is set via the <code>OWNER_PASSWORD_HASH</code> environment variable. Use <code>scripts/hash_password.py</code> to generate a new hash, update your <code>.env</code>, and restart the app.</p>
+  </div>
+{% endblock %}

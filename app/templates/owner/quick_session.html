@@ -3,68 +3,72 @@
 {% block title %}Quick Action Session{% endblock %}
 {% block content %}
   <div class="quick-session-frame">
-    <p class="small"><a href="/dashboard">Exit Session</a></p>
+    <p class="small mb-3"><a href="/dashboard">Exit Session</a></p>
 
     {% if req is none %}
-      <div class="card">
-        <h1>All done</h1>
-        <p class="muted">No Quick Actions waiting.</p>
-        <a class="btn btn-primary" href="/dashboard">Back to Dashboard</a>
+      <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+          <h1 class="h4">All done</h1>
+          <p class="text-muted">No Quick Actions waiting.</p>
+          <a class="btn btn-primary" href="/dashboard">Back to Dashboard</a>
+        </div>
       </div>
     {% else %}
-      <div class="card">
-        <p class="muted small">{{ req.public_number }} &middot; {{ req.requester_name }}</p>
-        <h1>{{ req.title }}</h1>
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <p class="text-muted small mb-1">{{ req.public_number }} &middot; {{ req.requester_name }}</p>
+          <h1 class="h3">{{ req.title }}</h1>
 
-        {% if req.desired_completion_date %}
-          <p>{{ m.urgency_badge(urgency, req.desired_completion_date.strftime('%b %-d, %Y'), '') }}</p>
-          {% if req.desired_date_reason %}<p class="small muted">{{ req.desired_date_reason }}</p>{% endif %}
-        {% endif %}
+          {% if req.desired_completion_date %}
+            <p>{{ m.urgency_badge(urgency, req.desired_completion_date.strftime('%b %-d, %Y'), '') }}</p>
+            {% if req.desired_date_reason %}<p class="small text-muted">{{ req.desired_date_reason }}</p>{% endif %}
+          {% endif %}
 
-        <div class="field">
-          <label>What's needed</label>
-          <div style="white-space: pre-wrap;">{{ req.description }}</div>
-        </div>
+          <div class="mb-3">
+            <div class="text-muted small fw-semibold text-uppercase mb-1">What's needed</div>
+            <div style="white-space: pre-wrap;">{{ req.description }}</div>
+          </div>
 
-        {% if req.links %}
-        <div class="field">
-          <label>Supporting links</label>
-          <ul class="table-links">
-            {% for link in req.links %}
-              <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label or link.url }}</a></li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
+          {% if req.links %}
+          <div class="mb-3">
+            <div class="text-muted small fw-semibold text-uppercase mb-1">Supporting links</div>
+            <ul class="list-unstyled mb-0">
+              {% for link in req.links %}
+                <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label or link.url }}</a></li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
 
-        {% if req.additional_context %}
-        <div class="field">
-          <label>Additional context</label>
-          <div style="white-space: pre-wrap;">{{ req.additional_context }}</div>
-        </div>
-        {% endif %}
+          {% if req.additional_context %}
+          <div class="mb-3">
+            <div class="text-muted small fw-semibold text-uppercase mb-1">Additional context</div>
+            <div style="white-space: pre-wrap;">{{ req.additional_context }}</div>
+          </div>
+          {% endif %}
 
-        <form method="post" action="/quick-session/{{ req.id }}/done">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn btn-primary btn-large btn-block">Done</button>
-        </form>
-
-        <div class="actions-row" style="margin-top:0.85rem;">
-          <details>
-            <summary class="btn" role="button">Need Information</summary>
-            <form method="post" action="/quick-session/{{ req.id }}/need-info" class="card" style="margin-top:0.5rem;">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <div class="field">
-                <label for="question">What additional information do you need?</label>
-                <textarea id="question" name="question" required></textarea>
-              </div>
-              <button type="submit" class="btn btn-primary">Send</button>
-            </form>
-          </details>
-          <form method="post" action="/quick-session/{{ req.id }}/move-to-long">
+          <form method="post" action="/quick-session/{{ req.id }}/done">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn">Move to Long Actions</button>
+            <button type="submit" class="btn btn-primary btn-lg w-100">Done</button>
           </form>
+
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <details>
+              <summary class="btn btn-outline-secondary">Need Information</summary>
+              <form method="post" action="/quick-session/{{ req.id }}/need-info" class="card card-body mt-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="mb-2">
+                  <label for="question" class="form-label">What additional information do you need?</label>
+                  <textarea class="form-control" id="question" name="question" rows="2" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Send</button>
+              </form>
+            </details>
+            <form method="post" action="/quick-session/{{ req.id }}/move-to-long">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="btn btn-outline-secondary">Move to Long Actions</button>
+            </form>
+          </div>
         </div>
       </div>
     {% endif %}

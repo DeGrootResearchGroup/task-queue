@@ -1,8 +1,12 @@
 {% macro urgency_badge(level, date_str, days_text) %}
   {% if level == 'none' %}
-    <span class="badge badge-none">No date</span>
-  {% else %}
-    <span class="badge badge-{{ level }}">{{ date_str }} &middot; {{ days_text }}</span>
+    <span class="badge rounded-pill text-bg-light border urgency-none">No date</span>
+  {% elif level == 'green' %}
+    <span class="badge rounded-pill text-bg-success urgency-green">{{ date_str }} &middot; {{ days_text }}</span>
+  {% elif level == 'yellow' %}
+    <span class="badge rounded-pill text-bg-warning urgency-yellow">{{ date_str }} &middot; {{ days_text }}</span>
+  {% elif level == 'red' %}
+    <span class="badge rounded-pill text-bg-danger urgency-red">{{ date_str }} &middot; {{ days_text }}</span>
   {% endif %}
 {% endmacro %}
 
@@ -19,5 +23,14 @@
 {% endmacro %}
 
 {% macro status_pill(status) %}
-  <span class="status-pill status-{{ status }}">{{ status_label(status) }}</span>
+  {% set bs_class = {
+    'submitted': 'text-bg-secondary',
+    'queued': 'text-bg-primary',
+    'in_progress': 'text-bg-info',
+    'needs_information': 'text-bg-warning',
+    'done': 'text-bg-success',
+    'declined': 'text-bg-secondary',
+    'withdrawn': 'text-bg-secondary',
+  } %}
+  <span class="badge rounded-pill {{ bs_class.get(status, 'text-bg-secondary') }} status-{{ status }}">{{ status_label(status) }}</span>
 {% endmacro %}

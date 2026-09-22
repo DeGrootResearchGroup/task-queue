@@ -14,7 +14,7 @@ def _request_id_from_dashboard(client, title: str) -> int:
     this row's own title and latching onto a different row's href.
     """
     resp = client.get("/dashboard")
-    pattern = rf'/requests/(\d+)"(?:(?!/requests/).)*?<span class="row-title">{re.escape(title)}'
+    pattern = rf'/requests/(\d+)"(?:(?!/requests/).)*?class="row-title[^"]*">{re.escape(title)}'
     match = re.search(pattern, resp.text, re.S)
     assert match, f"could not find {title!r} on dashboard"
     return int(match.group(1))

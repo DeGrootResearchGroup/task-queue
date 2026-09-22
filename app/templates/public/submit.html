@@ -1,128 +1,140 @@
 {% extends "base.html" %}
 {% block title %}Submit a request{% endblock %}
 {% block content %}
-  <h1>Submit a request</h1>
-  <p class="muted">
-    This is for asynchronous work requests to {{ settings_row.owner_display_name }} — not for scheduling meetings.
-    {% if settings_row.meeting_booking_url %}
-      Need a meeting instead? <a href="{{ settings_row.meeting_booking_url }}">{{ settings_row.meeting_booking_text or 'Use the normal booking process.' }}</a>
-    {% endif %}
-  </p>
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-9 col-xl-8">
+      <h1 class="h3 mb-2">Submit a request</h1>
+      <p class="text-muted">
+        This is for asynchronous work requests to {{ settings_row.owner_display_name }} — not for scheduling meetings.
+        {% if settings_row.meeting_booking_url %}
+          Need a meeting instead? <a href="{{ settings_row.meeting_booking_url }}">{{ settings_row.meeting_booking_text or 'Use the normal booking process.' }}</a>
+        {% endif %}
+      </p>
 
-  <div class="card" style="background: var(--info-bg); border-color: var(--info-bg);">
-    <p style="margin:0;">
-      Please make your request self-contained. Before I can accept a request into my work queue, I need
-      everything required to complete it in one sitting: clear instructions, relevant documents or links,
-      and any context needed to make decisions.
-    </p>
-    <p style="margin: 0.5rem 0 0;">
-      If I need additional information, the request will be returned to you for clarification before work can continue.
-    </p>
-  </div>
+      <div class="card notice-card mb-4">
+        <div class="card-body">
+          <p class="mb-2">
+            Please make your request self-contained. Before I can accept a request into my work queue, I need
+            everything required to complete it in one sitting: clear instructions, relevant documents or links,
+            and any context needed to make decisions.
+          </p>
+          <p class="mb-0">
+            If I need additional information, the request will be returned to you for clarification before work can continue.
+          </p>
+        </div>
+      </div>
 
-  <form method="post" action="/" class="card">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="{{ form_rendered_at_field }}" value="{{ form_rendered_at }}">
-    <div class="honeypot" aria-hidden="true">
-      <label for="website">Leave this field blank</label>
-      <input type="text" id="website" name="{{ honeypot_field }}" tabindex="-1" autocomplete="off">
-    </div>
-
-    <div class="field {{ 'invalid' if errors.requester_name }}">
-      <label for="requester_name">Your name</label>
-      <input type="text" id="requester_name" name="requester_name" value="{{ values.requester_name or '' }}" required>
-      {% if errors.requester_name %}<div class="error">{{ errors.requester_name }}</div>{% endif %}
-    </div>
-
-    <div class="field {{ 'invalid' if errors.requester_email }}">
-      <label for="requester_email">Your email address</label>
-      <input type="email" id="requester_email" name="requester_email" value="{{ values.requester_email or '' }}" required>
-      {% if errors.requester_email %}<div class="error">{{ errors.requester_email }}</div>{% endif %}
-    </div>
-
-    <div class="field {{ 'invalid' if errors.title }}">
-      <label for="title">Request title</label>
-      <input type="text" id="title" name="title" value="{{ values.title or '' }}" required>
-      <div class="help">A short, descriptive title, e.g. "Review manuscript introduction".</div>
-      {% if errors.title %}<div class="error">{{ errors.title }}</div>{% endif %}
-    </div>
-
-    <div class="field {{ 'invalid' if errors.description }}">
-      <label for="description">What exactly do you need me to do?</label>
-      <textarea id="description" name="description" required>{{ values.description or '' }}</textarea>
-      <div class="help">Describe the action or decision you need, not just the topic. E.g. "Review Sections 2&ndash;3 and tell me whether the argument and methodology are clear."</div>
-      {% if errors.description %}<div class="error">{{ errors.description }}</div>{% endif %}
-    </div>
-
-    <div class="field {{ 'invalid' if errors.links }}">
-      <label>Relevant links</label>
-      <div id="link-rows">
-        {% for i in range(3) %}
-          <div class="link-row">
-            <input type="text" name="link_label" placeholder="Label (optional)" value="{{ links[i].label if links|length > i else '' }}">
-            <input type="text" name="link_url" placeholder="https://..." value="{{ links[i].url if links|length > i else '' }}">
+      <form method="post" action="/" class="card shadow-sm">
+        <div class="card-body p-4">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="{{ form_rendered_at_field }}" value="{{ form_rendered_at }}">
+          <div class="honeypot" aria-hidden="true">
+            <label for="website">Leave this field blank</label>
+            <input type="text" id="website" name="{{ honeypot_field }}" tabindex="-1" autocomplete="off">
           </div>
-        {% endfor %}
-      </div>
-      <button type="button" id="add-link-row" class="btn">Add another link</button>
-      <div class="help">I need to already have permission to access anything you link to.</div>
-      {% if errors.links %}<div class="error">{{ errors.links }}</div>{% endif %}
+
+          <div class="mb-3">
+            <label for="requester_name" class="form-label">Your name</label>
+            <input type="text" class="form-control {{ 'is-invalid' if errors.requester_name }}" id="requester_name" name="requester_name" value="{{ values.requester_name or '' }}" required>
+            {% if errors.requester_name %}<div class="invalid-feedback">{{ errors.requester_name }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label for="requester_email" class="form-label">Your email address</label>
+            <input type="email" class="form-control {{ 'is-invalid' if errors.requester_email }}" id="requester_email" name="requester_email" value="{{ values.requester_email or '' }}" required>
+            {% if errors.requester_email %}<div class="invalid-feedback">{{ errors.requester_email }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label for="title" class="form-label">Request title</label>
+            <input type="text" class="form-control {{ 'is-invalid' if errors.title }}" id="title" name="title" value="{{ values.title or '' }}" required>
+            <div class="form-text">A short, descriptive title, e.g. "Review manuscript introduction".</div>
+            {% if errors.title %}<div class="invalid-feedback">{{ errors.title }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label for="description" class="form-label">What exactly do you need me to do?</label>
+            <textarea class="form-control {{ 'is-invalid' if errors.description }}" id="description" name="description" rows="4" required>{{ values.description or '' }}</textarea>
+            <div class="form-text">Describe the action or decision you need, not just the topic. E.g. "Review Sections 2&ndash;3 and tell me whether the argument and methodology are clear."</div>
+            {% if errors.description %}<div class="invalid-feedback">{{ errors.description }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Relevant links</label>
+            <div id="link-rows">
+              {% for i in range(3) %}
+                <div class="row g-2 mb-2 link-row">
+                  <div class="col-4">
+                    <input type="text" class="form-control" name="link_label" placeholder="Label (optional)" value="{{ links[i].label if links|length > i else '' }}">
+                  </div>
+                  <div class="col-8">
+                    <input type="text" class="form-control" name="link_url" placeholder="https://..." value="{{ links[i].url if links|length > i else '' }}">
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+            <button type="button" id="add-link-row" class="btn btn-outline-secondary btn-sm">Add another link</button>
+            <div class="form-text">I need to already have permission to access anything you link to.</div>
+            {% if errors.links %}<div class="text-danger small mt-1">{{ errors.links }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label for="additional_context" class="form-label">Additional context (optional)</label>
+            <textarea class="form-control {{ 'is-invalid' if errors.additional_context }}" id="additional_context" name="additional_context" rows="3">{{ values.additional_context or '' }}</textarea>
+            <div class="form-text">Anything I need to know that isn't obvious from the materials above: background, constraints, decisions already made, specific questions, etc.</div>
+            {% if errors.additional_context %}<div class="invalid-feedback">{{ errors.additional_context }}</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label for="desired_completion_date" class="form-label">Desired completion date (optional)</label>
+            <input type="date" class="form-control" id="desired_completion_date" name="desired_completion_date" value="{{ values.desired_completion_date or '' }}">
+          </div>
+
+          <div class="mb-3">
+            <label for="desired_date_reason" class="form-label">Why this date?</label>
+            <textarea class="form-control {{ 'is-invalid' if errors.desired_date_reason }}" id="desired_date_reason" name="desired_date_reason" rows="2">{{ values.desired_date_reason or '' }}</textarea>
+            <div class="form-text">Required if you specified a desired date. E.g. "Submission deadline is October 15."</div>
+            {% if errors.desired_date_reason %}<div class="invalid-feedback">{{ errors.desired_date_reason }}</div>{% endif %}
+          </div>
+
+          <fieldset class="mb-3">
+            <legend class="form-label h6">Could I reasonably complete this request in {{ settings_row.quick_action_minutes }} minutes or less once I open it?</legend>
+            <div class="form-text mt-0 mb-2">Include the time required to read or review any supporting material.</div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="request_class" id="class_quick" value="quick" {{ 'checked' if values.request_class == 'quick' }} required>
+              <label class="form-check-label" for="class_quick"><strong>Yes</strong> — Quick Action</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="request_class" id="class_long" value="long" {{ 'checked' if values.request_class == 'long' }}>
+              <label class="form-check-label" for="class_long"><strong>No</strong> — Long Action</label>
+            </div>
+            {% if errors.request_class %}<div class="text-danger small mt-1">{{ errors.request_class }}</div>{% endif %}
+          </fieldset>
+
+          <div class="form-check mb-4">
+            <input class="form-check-input" type="checkbox" name="confirmation" id="confirmation" required>
+            <label class="form-check-label" for="confirmation">
+              To the best of my knowledge, the Owner has everything needed to complete this request in one sitting.
+            </label>
+            {% if errors.confirmation %}<div class="text-danger small mt-1">{{ errors.confirmation }}</div>{% endif %}
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg w-100">Submit request</button>
+        </div>
+      </form>
     </div>
+  </div>
+{% endblock %}
 
-    <div class="field {{ 'invalid' if errors.additional_context }}">
-      <label for="additional_context">Additional context (optional)</label>
-      <textarea id="additional_context" name="additional_context">{{ values.additional_context or '' }}</textarea>
-      <div class="help">Anything I need to know that isn't obvious from the materials above: background, constraints, decisions already made, specific questions, etc.</div>
-      {% if errors.additional_context %}<div class="error">{{ errors.additional_context }}</div>{% endif %}
-    </div>
-
-    <div class="field">
-      <label for="desired_completion_date">Desired completion date (optional)</label>
-      <input type="date" id="desired_completion_date" name="desired_completion_date" value="{{ values.desired_completion_date or '' }}">
-    </div>
-
-    <div class="field {{ 'invalid' if errors.desired_date_reason }}" id="date-reason-field">
-      <label for="desired_date_reason">Why this date?</label>
-      <textarea id="desired_date_reason" name="desired_date_reason">{{ values.desired_date_reason or '' }}</textarea>
-      <div class="help">Required if you specified a desired date. E.g. "Submission deadline is October 15."</div>
-      {% if errors.desired_date_reason %}<div class="error">{{ errors.desired_date_reason }}</div>{% endif %}
-    </div>
-
-    <div class="field {{ 'invalid' if errors.request_class }}">
-      <label>Could I reasonably complete this request in {{ settings_row.quick_action_minutes }} minutes or less once I open it?</label>
-      <div class="help">Include the time required to read or review any supporting material.</div>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input type="radio" name="request_class" value="quick" {{ 'checked' if values.request_class == 'quick' }} required>
-          <span><strong>Yes</strong> — Quick Action</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="request_class" value="long" {{ 'checked' if values.request_class == 'long' }}>
-          <span><strong>No</strong> — Long Action</span>
-        </label>
-      </div>
-      {% if errors.request_class %}<div class="error">{{ errors.request_class }}</div>{% endif %}
-    </div>
-
-    <div class="field {{ 'invalid' if errors.confirmation }}">
-      <label class="checkbox-field">
-        <input type="checkbox" name="confirmation" required>
-        <span>To the best of my knowledge, the Owner has everything needed to complete this request in one sitting.</span>
-      </label>
-      {% if errors.confirmation %}<div class="error">{{ errors.confirmation }}</div>{% endif %}
-    </div>
-
-    <button type="submit" class="btn btn-primary btn-large btn-block">Submit request</button>
-  </form>
-
-  <script>
-    document.getElementById('add-link-row').addEventListener('click', function () {
-      const container = document.getElementById('link-rows');
-      const row = document.createElement('div');
-      row.className = 'link-row';
-      row.innerHTML = '<input type="text" name="link_label" placeholder="Label (optional)">' +
-        '<input type="text" name="link_url" placeholder="https://...">';
-      container.appendChild(row);
-    });
-  </script>
+{% block scripts %}
+<script>
+  document.getElementById('add-link-row').addEventListener('click', function () {
+    const container = document.getElementById('link-rows');
+    const row = document.createElement('div');
+    row.className = 'row g-2 mb-2 link-row';
+    row.innerHTML = '<div class="col-4"><input type="text" class="form-control" name="link_label" placeholder="Label (optional)"></div>' +
+      '<div class="col-8"><input type="text" class="form-control" name="link_url" placeholder="https://..."></div>';
+    container.appendChild(row);
+  });
+</script>
 {% endblock %}

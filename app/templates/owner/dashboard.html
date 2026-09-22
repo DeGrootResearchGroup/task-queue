@@ -2,145 +2,139 @@
 {% import "_macros.html" as m %}
 {% block title %}Dashboard — Requests{% endblock %}
 {% block content %}
-  <h1>Requests</h1>
+  <h1 class="h3 mb-3">Requests</h1>
 
-  <div class="summary-bar">
+  <div class="summary-bar d-flex flex-wrap gap-3 small mb-4">
     <span>{{ submitted|length }} awaiting review</span>
     <span>{{ queued|length }} long actions queued</span>
     <span>{{ quick_pending_count }} quick actions</span>
     {% if needs_info %}<span>{{ needs_info|length }} waiting for information</span>{% endif %}
   </div>
 
-  <section class="section">
-    <div class="section-header">
-      <h2>Awaiting review</h2>
-      <span class="count">{{ submitted|length }}</span>
+  <div class="card section-card shadow-sm mb-4">
+    <div class="card-header">
+      <h2 class="h6 mb-0 text-uppercase">Awaiting review</h2>
+      <span class="text-muted small">{{ submitted|length }}</span>
     </div>
     {% if submitted %}
-      <ul class="row-list">
+      <div class="list-group list-group-flush">
         {% for item in submitted %}
-          <li>
-            <a class="row" href="/requests/{{ item.req.id }}">
-              <span class="row-main">
-                <span class="row-title">{{ item.req.title }}</span>
-                <span class="row-meta">{{ item.req.requester_name }} &middot; submitted {{ item.req.created_at.strftime('%b %-d') }}</span>
-              </span>
-              {{ m.urgency_badge(item.urgency, item.req.desired_completion_date.strftime('%b %-d') if item.req.desired_completion_date else '', item.days_text) }}
-            </a>
-          </li>
+          <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="/requests/{{ item.req.id }}">
+            <div class="flex-grow-1 min-width-0">
+              <div class="row-title fw-semibold text-truncate">{{ item.req.title }}</div>
+              <div class="small text-muted">{{ item.req.requester_name }} &middot; submitted {{ item.req.created_at.strftime('%b %-d') }}</div>
+            </div>
+            {{ m.urgency_badge(item.urgency, item.req.desired_completion_date.strftime('%b %-d') if item.req.desired_completion_date else '', item.days_text) }}
+          </a>
         {% endfor %}
-      </ul>
+      </div>
     {% else %}
       <p class="empty-state">No Long Actions awaiting review.</p>
     {% endif %}
-  </section>
+  </div>
 
   {% if in_progress %}
-  <section class="section">
-    <div class="section-header">
-      <h2>In progress</h2>
-      <span class="count">{{ in_progress|length }}</span>
+  <div class="card section-card shadow-sm mb-4">
+    <div class="card-header">
+      <h2 class="h6 mb-0 text-uppercase">In progress</h2>
+      <span class="text-muted small">{{ in_progress|length }}</span>
     </div>
-    <ul class="row-list">
+    <div class="list-group list-group-flush">
       {% for item in in_progress %}
-        <li>
-          <a class="row" href="/requests/{{ item.req.id }}">
-            <span class="row-main">
-              <span class="row-title">{{ item.req.title }}</span>
-              <span class="row-meta">{{ item.req.requester_name }}</span>
-            </span>
-            {{ m.urgency_badge(item.urgency, item.req.desired_completion_date.strftime('%b %-d') if item.req.desired_completion_date else '', item.days_text) }}
-          </a>
-        </li>
+        <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="/requests/{{ item.req.id }}">
+          <div class="flex-grow-1 min-width-0">
+            <div class="row-title fw-semibold text-truncate">{{ item.req.title }}</div>
+            <div class="small text-muted">{{ item.req.requester_name }}</div>
+          </div>
+          {{ m.urgency_badge(item.urgency, item.req.desired_completion_date.strftime('%b %-d') if item.req.desired_completion_date else '', item.days_text) }}
+        </a>
       {% endfor %}
-    </ul>
-  </section>
+    </div>
+  </div>
   {% endif %}
 
-  <section class="section">
-    <div class="section-header">
-      <h2>Accepted queue</h2>
-      <span class="count">{{ queued|length }}</span>
+  <div class="card section-card shadow-sm mb-4">
+    <div class="card-header">
+      <h2 class="h6 mb-0 text-uppercase">Accepted queue</h2>
+      <span class="text-muted small">{{ queued|length }}</span>
     </div>
     {% if queued %}
-      <ul class="row-list" id="queue-list" data-reorder-url-base="/requests" data-csrf="{{ csrf_token }}">
+      <div class="list-group list-group-flush" id="queue-list" data-reorder-url-base="/requests" data-csrf="{{ csrf_token }}">
         {% for item in queued %}
-          <li class="row" data-request-id="{{ item.req.id }}">
-            <span class="drag-handle" aria-hidden="true">&#8942;&#8942;</span>
+          <div class="list-group-item d-flex align-items-center gap-2" data-request-id="{{ item.req.id }}">
+            <span class="drag-handle bi bi-grip-vertical" aria-hidden="true"></span>
             <span class="row-position">{{ item.req.queue_position }}</span>
-            <a class="row-main" style="text-decoration:none;color:inherit" href="/requests/{{ item.req.id }}">
-              <span class="row-title">{{ item.req.title }}</span>
-              <span class="row-meta">{{ item.req.requester_name }}</span>
+            <a class="flex-grow-1 min-width-0 text-decoration-none text-reset" href="/requests/{{ item.req.id }}">
+              <div class="row-title fw-semibold text-truncate">{{ item.req.title }}</div>
+              <div class="small text-muted">{{ item.req.requester_name }}</div>
             </a>
             {{ m.urgency_badge(item.urgency, item.req.desired_completion_date.strftime('%b %-d') if item.req.desired_completion_date else '', item.days_text) }}
-            <span class="small">
-              <form method="post" action="/requests/{{ item.req.id }}/move-up" class="inline-form">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Reorder">
+              <form method="post" action="/requests/{{ item.req.id }}/move-up">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" class="link-button" aria-label="Move up">&uarr;</button>
+                <button type="submit" class="btn btn-outline-secondary border-0" aria-label="Move up"><i class="bi bi-chevron-up"></i></button>
               </form>
-              <form method="post" action="/requests/{{ item.req.id }}/move-down" class="inline-form">
+              <form method="post" action="/requests/{{ item.req.id }}/move-down">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" class="link-button" aria-label="Move down">&darr;</button>
+                <button type="submit" class="btn btn-outline-secondary border-0" aria-label="Move down"><i class="bi bi-chevron-down"></i></button>
               </form>
-            </span>
-          </li>
+            </div>
+          </div>
         {% endfor %}
-      </ul>
+      </div>
     {% else %}
       <p class="empty-state">No accepted Long Actions queued.</p>
     {% endif %}
-  </section>
+  </div>
 
-  <section class="section">
-    <div class="section-header">
-      <h2>Quick Actions</h2>
-      <span class="count">{{ quick_pending_count }}</span>
+  <div class="card section-card shadow-sm mb-4">
+    <div class="card-header">
+      <h2 class="h6 mb-0 text-uppercase">Quick Actions</h2>
+      <span class="text-muted small">{{ quick_pending_count }}</span>
     </div>
-    <div style="padding: 0.85rem 1rem;">
+    <div class="card-body py-3">
       <a href="/quick-session" class="btn btn-primary">Start Quick Action Session</a>
     </div>
     {% if quick_pending %}
-      <ul class="row-list">
+      <div class="list-group list-group-flush">
         {% for req in quick_pending %}
-          <li>
-            <a class="row" href="/requests/{{ req.id }}">
-              <span class="row-main">
-                <span class="row-title">{{ req.title }}</span>
-                <span class="row-meta">{{ req.requester_name }} &middot; {{ req.created_at.strftime('%b %-d') }}</span>
-              </span>
-            </a>
-          </li>
+          <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="/requests/{{ req.id }}">
+            <div class="flex-grow-1 min-width-0">
+              <div class="row-title fw-semibold text-truncate">{{ req.title }}</div>
+              <div class="small text-muted">{{ req.requester_name }} &middot; {{ req.created_at.strftime('%b %-d') }}</div>
+            </div>
+          </a>
         {% endfor %}
-      </ul>
+      </div>
     {% else %}
       <p class="empty-state">No Quick Actions waiting.</p>
     {% endif %}
-  </section>
+  </div>
 
   {% if needs_info %}
-  <section class="section">
-    <div class="section-header">
-      <h2>Waiting for information</h2>
-      <span class="count">{{ needs_info|length }}</span>
+  <div class="card section-card shadow-sm mb-4">
+    <div class="card-header">
+      <h2 class="h6 mb-0 text-uppercase">Waiting for information</h2>
+      <span class="text-muted small">{{ needs_info|length }}</span>
     </div>
-    <ul class="row-list">
+    <div class="list-group list-group-flush">
       {% for req in needs_info %}
-        <li>
-          <a class="row" href="/requests/{{ req.id }}">
-            <span class="row-main">
-              <span class="row-title">
-                {{ req.title }}
-                {% if req.new_information_flag %}<span class="badge badge-yellow">New information</span>{% endif %}
-              </span>
-              <span class="row-meta">{{ req.requester_name }} &middot; was {{ req.previous_status.value if req.previous_status else '' }}</span>
-            </span>
-          </a>
-        </li>
+        <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="/requests/{{ req.id }}">
+          <div class="flex-grow-1 min-width-0">
+            <div class="row-title fw-semibold text-truncate">
+              {{ req.title }}
+              {% if req.new_information_flag %}<span class="badge text-bg-warning ms-1">New information</span>{% endif %}
+            </div>
+            <div class="small text-muted">{{ req.requester_name }} &middot; was {{ req.previous_status.value if req.previous_status else '' }}</div>
+          </div>
+        </a>
       {% endfor %}
-    </ul>
-  </section>
+    </div>
+  </div>
   {% endif %}
+{% endblock %}
 
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-  <script src="/static/js/reorder.js"></script>
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="/static/js/reorder.js"></script>
 {% endblock %}

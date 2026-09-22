@@ -2,213 +2,225 @@
 {% import "_macros.html" as m %}
 {% block title %}{{ req.title }} — {{ req.public_number }}{% endblock %}
 {% block content %}
-  <p class="small"><a href="/dashboard">&larr; Dashboard</a></p>
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-9 col-xl-8">
+      <p class="small mb-2"><a href="/dashboard">&larr; Dashboard</a></p>
 
-  <h1>{{ req.title }}</h1>
-  <p class="muted">
-    {{ req.public_number }} &middot;
-    {{ 'Quick Action' if req.request_class.value == 'quick' else 'Long Action' }} &middot;
-    {{ m.status_pill(req.status.value) }}
-  </p>
+      <h1 class="h3 mb-1">{{ req.title }}</h1>
+      <p class="text-muted mb-4">
+        {{ req.public_number }} &middot;
+        {{ 'Quick Action' if req.request_class.value == 'quick' else 'Long Action' }} &middot;
+        {{ m.status_pill(req.status.value) }}
+      </p>
 
-  <div class="card">
-    <div class="field">
-      <label>Requester</label>
-      <div>{{ req.requester_name }} &lt;{{ req.requester_email }}&gt;</div>
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="mb-3">
+            <div class="text-muted small fw-semibold text-uppercase mb-1">Requester</div>
+            <div>{{ req.requester_name }} &lt;{{ req.requester_email }}&gt;</div>
+          </div>
+          <div class="mb-3">
+            <div class="text-muted small fw-semibold text-uppercase mb-1">Submitted</div>
+            <div>{{ req.created_at.strftime('%B %-d, %Y') }}</div>
+          </div>
+          {% if req.desired_completion_date %}
+          <div class="mb-3">
+            <div class="text-muted small fw-semibold text-uppercase mb-1">Desired completion date</div>
+            <div>{{ m.urgency_badge(urgency, req.desired_completion_date.strftime('%b %-d, %Y'), days_text) }}</div>
+            {% if req.desired_date_reason %}<div class="form-text mt-1">{{ req.desired_date_reason }}</div>{% endif %}
+          </div>
+          {% endif %}
+          <div class="mb-3">
+            <div class="text-muted small fw-semibold text-uppercase mb-1">What's needed</div>
+            <div style="white-space: pre-wrap;">{{ req.description }}</div>
+          </div>
+          {% if req.links %}
+          <div class="mb-3">
+            <div class="text-muted small fw-semibold text-uppercase mb-1">Supporting links</div>
+            <ul class="list-unstyled mb-0">
+              {% for link in req.links %}
+                <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label or link.url }}</a></li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% if req.additional_context %}
+          <div>
+            <div class="text-muted small fw-semibold text-uppercase mb-1">Additional context</div>
+            <div style="white-space: pre-wrap;">{{ req.additional_context }}</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      {# ---------------- Contextual actions ---------------- #}
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted mb-3">Actions</h2>
+
+          {% if req.status.value == 'submitted' %}
+            <div class="d-flex flex-wrap gap-2">
+              <form method="post" action="/requests/{{ req.id }}/accept">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-primary">Accept &amp; Queue</button>
+              </form>
+              <details>
+                <summary class="btn btn-outline-secondary">Request Information</summary>
+                <form method="post" action="/requests/{{ req.id }}/request-info" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <div class="mb-2">
+                    <label for="question" class="form-label">What additional information do you need?</label>
+                    <textarea class="form-control" id="question" name="question" rows="2" required></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm">Send</button>
+                </form>
+              </details>
+              <details>
+                <summary class="btn btn-outline-danger">Decline</summary>
+                <form method="post" action="/requests/{{ req.id }}/decline" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <div class="mb-2">
+                    <label for="reason" class="form-label">Reason (shown to the requester)</label>
+                    <textarea class="form-control" id="reason" name="reason" rows="2" required></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-danger btn-sm">Confirm Decline</button>
+                </form>
+              </details>
+            </div>
+
+          {% elif req.status.value == 'queued' and req.request_class.value == 'long' %}
+            <div class="d-flex flex-wrap gap-2">
+              <form method="post" action="/requests/{{ req.id }}/start">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-primary">Start Work</button>
+              </form>
+              <details>
+                <summary class="btn btn-outline-secondary">Request Information</summary>
+                <form method="post" action="/requests/{{ req.id }}/request-info" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <div class="mb-2">
+                    <label for="question2" class="form-label">What additional information do you need?</label>
+                    <textarea class="form-control" id="question2" name="question" rows="2" required></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm">Send</button>
+                </form>
+              </details>
+              <details>
+                <summary class="btn btn-outline-secondary">Mark Done</summary>
+                <form method="post" action="/requests/{{ req.id }}/complete" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <div class="mb-2">
+                    <label for="note1" class="form-label">Completion note (optional)</label>
+                    <textarea class="form-control" id="note1" name="note" rows="2"></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm">Complete</button>
+                </form>
+              </details>
+            </div>
+
+          {% elif req.status.value == 'queued' and req.request_class.value == 'quick' %}
+            <div class="d-flex flex-wrap gap-2">
+              <form method="post" action="/requests/{{ req.id }}/complete">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-primary">Done</button>
+              </form>
+              <details>
+                <summary class="btn btn-outline-secondary">Need Information</summary>
+                <form method="post" action="/requests/{{ req.id }}/request-info" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <div class="mb-2">
+                    <label for="question3" class="form-label">What additional information do you need?</label>
+                    <textarea class="form-control" id="question3" name="question" rows="2" required></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm">Send</button>
+                </form>
+              </details>
+              <form method="post" action="/requests/{{ req.id }}/move-to-long">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-outline-secondary">Move to Long Actions</button>
+              </form>
+            </div>
+
+          {% elif req.status.value == 'in_progress' %}
+            <div class="d-flex flex-wrap gap-2">
+              <details open>
+                <summary class="btn btn-primary">Complete</summary>
+                <form method="post" action="/requests/{{ req.id }}/complete" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <div class="mb-2">
+                    <label for="note2" class="form-label">Completion note (optional)</label>
+                    <textarea class="form-control" id="note2" name="note" rows="2"></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm">Confirm Complete</button>
+                </form>
+              </details>
+              <details>
+                <summary class="btn btn-outline-secondary">Request Information</summary>
+                <form method="post" action="/requests/{{ req.id }}/request-info" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <div class="mb-2">
+                    <label for="question4" class="form-label">What additional information do you need?</label>
+                    <textarea class="form-control" id="question4" name="question" rows="2" required></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-sm">Send</button>
+                </form>
+              </details>
+              {% if req.request_class.value == 'long' %}
+              <form method="post" action="/requests/{{ req.id }}/return-to-queue">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-outline-secondary">Return to Queue</button>
+              </form>
+              {% endif %}
+            </div>
+
+          {% elif req.status.value == 'needs_information' %}
+            <p class="text-muted">Waiting on the requester to respond. They were asked:</p>
+            {% set open_q = req.info_requests|selectattr('responded_at', 'none')|list|last %}
+            {% if open_q %}<blockquote class="mb-2">{{ open_q.owner_question }}</blockquote>{% endif %}
+            <p class="small text-muted mb-0">This request will automatically resume once the requester responds via their tracking link.</p>
+
+          {% elif req.status.value == 'done' %}
+            <p>Completed {{ req.completed_at.strftime('%B %-d, %Y') if req.completed_at else '' }}.</p>
+            {% if req.completion_note %}<p class="mb-0">{{ req.completion_note }}</p>{% endif %}
+
+          {% elif req.status.value == 'declined' %}
+            <p>Declined {{ req.declined_at.strftime('%B %-d, %Y') if req.declined_at else '' }}.</p>
+            {% if req.decline_reason %}<p class="mb-0">{{ req.decline_reason }}</p>{% endif %}
+
+          {% elif req.status.value == 'withdrawn' %}
+            <p class="mb-0">Withdrawn by the requester {{ req.withdrawn_at.strftime('%B %-d, %Y') if req.withdrawn_at else '' }}.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if req.updates %}
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted mb-3">Additional information from requester</h2>
+          {% for u in req.updates %}
+            <div class="mb-2">
+              <div class="small text-muted">{{ u.created_at.strftime('%B %-d, %Y') }}</div>
+              <div style="white-space: pre-wrap;">{{ u.content }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted">Activity</h2>
+          <ul class="activity-list">
+            {% for event in req.events|reverse %}
+              {% if event.event_type.value != 'reordered' %}
+                <li><span class="activity-date">{{ event.created_at.strftime('%b %-d') }}</span>{{ event.event_type.value.replace('_', ' ')|capitalize }}</li>
+              {% endif %}
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+
+      <p class="small"><a href="/r/{{ req.access_token }}" target="_blank">View requester tracking page &rarr;</a></p>
     </div>
-    <div class="field">
-      <label>Submitted</label>
-      <div>{{ req.created_at.strftime('%B %-d, %Y') }}</div>
-    </div>
-    {% if req.desired_completion_date %}
-    <div class="field">
-      <label>Desired completion date</label>
-      <div>{{ m.urgency_badge(urgency, req.desired_completion_date.strftime('%b %-d, %Y'), days_text) }}</div>
-      {% if req.desired_date_reason %}<div class="help">{{ req.desired_date_reason }}</div>{% endif %}
-    </div>
-    {% endif %}
-    <div class="field">
-      <label>What's needed</label>
-      <div style="white-space: pre-wrap;">{{ req.description }}</div>
-    </div>
-    {% if req.links %}
-    <div class="field">
-      <label>Supporting links</label>
-      <ul class="table-links">
-        {% for link in req.links %}
-          <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label or link.url }}</a></li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
-    {% if req.additional_context %}
-    <div class="field">
-      <label>Additional context</label>
-      <div style="white-space: pre-wrap;">{{ req.additional_context }}</div>
-    </div>
-    {% endif %}
   </div>
-
-  {# ---------------- Contextual actions ---------------- #}
-  <div class="card">
-    <h2>Actions</h2>
-
-    {% if req.status.value == 'submitted' %}
-      <div class="actions-row">
-        <form method="post" action="/requests/{{ req.id }}/accept">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn btn-primary">Accept &amp; Queue</button>
-        </form>
-        <details>
-          <summary class="btn" role="button">Request Information</summary>
-          <form method="post" action="/requests/{{ req.id }}/request-info" class="card" style="margin-top:0.5rem;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="field">
-              <label for="question">What additional information do you need?</label>
-              <textarea id="question" name="question" required></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Send</button>
-          </form>
-        </details>
-        <details>
-          <summary class="btn" role="button">Decline</summary>
-          <form method="post" action="/requests/{{ req.id }}/decline" class="card" style="margin-top:0.5rem;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="field">
-              <label for="reason">Reason (shown to the requester)</label>
-              <textarea id="reason" name="reason" required></textarea>
-            </div>
-            <button type="submit" class="btn btn-danger">Confirm Decline</button>
-          </form>
-        </details>
-      </div>
-
-    {% elif req.status.value == 'queued' and req.request_class.value == 'long' %}
-      <div class="actions-row">
-        <form method="post" action="/requests/{{ req.id }}/start">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn btn-primary">Start Work</button>
-        </form>
-        <details>
-          <summary class="btn" role="button">Request Information</summary>
-          <form method="post" action="/requests/{{ req.id }}/request-info" class="card" style="margin-top:0.5rem;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="field">
-              <label for="question2">What additional information do you need?</label>
-              <textarea id="question2" name="question" required></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Send</button>
-          </form>
-        </details>
-        <details>
-          <summary class="btn" role="button">Mark Done</summary>
-          <form method="post" action="/requests/{{ req.id }}/complete" class="card" style="margin-top:0.5rem;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="field">
-              <label for="note1">Completion note (optional)</label>
-              <textarea id="note1" name="note"></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Complete</button>
-          </form>
-        </details>
-      </div>
-
-    {% elif req.status.value == 'queued' and req.request_class.value == 'quick' %}
-      <div class="actions-row">
-        <form method="post" action="/requests/{{ req.id }}/complete">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn btn-primary">Done</button>
-        </form>
-        <details>
-          <summary class="btn" role="button">Need Information</summary>
-          <form method="post" action="/requests/{{ req.id }}/request-info" class="card" style="margin-top:0.5rem;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="field">
-              <label for="question3">What additional information do you need?</label>
-              <textarea id="question3" name="question" required></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Send</button>
-          </form>
-        </details>
-        <form method="post" action="/requests/{{ req.id }}/move-to-long">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn">Move to Long Actions</button>
-        </form>
-      </div>
-
-    {% elif req.status.value == 'in_progress' %}
-      <div class="actions-row">
-        <details open>
-          <summary class="btn btn-primary" role="button">Complete</summary>
-          <form method="post" action="/requests/{{ req.id }}/complete" class="card" style="margin-top:0.5rem;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="field">
-              <label for="note2">Completion note (optional)</label>
-              <textarea id="note2" name="note"></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Confirm Complete</button>
-          </form>
-        </details>
-        <details>
-          <summary class="btn" role="button">Request Information</summary>
-          <form method="post" action="/requests/{{ req.id }}/request-info" class="card" style="margin-top:0.5rem;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <div class="field">
-              <label for="question4">What additional information do you need?</label>
-              <textarea id="question4" name="question" required></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">Send</button>
-          </form>
-        </details>
-        {% if req.request_class.value == 'long' %}
-        <form method="post" action="/requests/{{ req.id }}/return-to-queue">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn">Return to Queue</button>
-        </form>
-        {% endif %}
-      </div>
-
-    {% elif req.status.value == 'needs_information' %}
-      <p class="muted">Waiting on the requester to respond. They were asked:</p>
-      {% set open_q = req.info_requests|selectattr('responded_at', 'none')|list|last %}
-      {% if open_q %}<blockquote>{{ open_q.owner_question }}</blockquote>{% endif %}
-      <p class="small muted">This request will automatically resume once the requester responds via their tracking link.</p>
-
-    {% elif req.status.value == 'done' %}
-      <p>Completed {{ req.completed_at.strftime('%B %-d, %Y') if req.completed_at else '' }}.</p>
-      {% if req.completion_note %}<p>{{ req.completion_note }}</p>{% endif %}
-
-    {% elif req.status.value == 'declined' %}
-      <p>Declined {{ req.declined_at.strftime('%B %-d, %Y') if req.declined_at else '' }}.</p>
-      {% if req.decline_reason %}<p>{{ req.decline_reason }}</p>{% endif %}
-
-    {% elif req.status.value == 'withdrawn' %}
-      <p>Withdrawn by the requester {{ req.withdrawn_at.strftime('%B %-d, %Y') if req.withdrawn_at else '' }}.</p>
-    {% endif %}
-  </div>
-
-  {% if req.updates %}
-  <div class="card">
-    <h2>Additional information from requester</h2>
-    {% for u in req.updates %}
-      <div class="field">
-        <label>{{ u.created_at.strftime('%B %-d, %Y') }}</label>
-        <div style="white-space: pre-wrap;">{{ u.content }}</div>
-      </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <div class="card">
-    <h2>Activity</h2>
-    <ul class="activity-list">
-      {% for event in req.events|reverse %}
-        {% if event.event_type.value != 'reordered' %}
-          <li><span class="activity-date">{{ event.created_at.strftime('%b %-d') }}</span>{{ event.event_type.value.replace('_', ' ')|capitalize }}</li>
-        {% endif %}
-      {% endfor %}
-    </ul>
-  </div>
-
-  <p class="small"><a href="/r/{{ req.access_token }}" target="_blank">View requester tracking page &rarr;</a></p>
 {% endblock %}

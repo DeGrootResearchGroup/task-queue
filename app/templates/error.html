@@ -1,9 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Error{% endblock %}
 {% block content %}
-  <div class="card">
-    <h1>Something went wrong</h1>
-    <p>{{ message }}</p>
-    <a class="btn" href="javascript:history.back()">Go back</a>
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h1 class="h4">Something went wrong</h1>
+          <p>{{ message }}</p>
+          <a class="btn btn-outline-secondary" href="javascript:history.back()">Go back</a>
+        </div>
+      </div>
+    </div>
   </div>
 {% endblock %}

@@ -1,19 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Owner Login{% endblock %}
 {% block content %}
-  <div class="card" style="max-width: 380px; margin: 3rem auto 0;">
-    <h1>Owner Login</h1>
-    <form method="post" action="/login">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="field">
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" required autofocus>
+  <div class="row justify-content-center">
+    <div class="col-12 col-sm-8 col-md-5 col-lg-4">
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <h1 class="h4 mb-4">Owner Login</h1>
+          <form method="post" action="/login">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="mb-3">
+              <label for="username" class="form-label">Username</label>
+              <input type="text" class="form-control" id="username" name="username" required autofocus>
+            </div>
+            <div class="mb-4">
+              <label for="password" class="form-label">Password</label>
+              <input type="password" class="form-control" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Log in</button>
+          </form>
+        </div>
       </div>
-      <div class="field">
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" required>
-      </div>
-      <button type="submit" class="btn btn-primary btn-block">Log in</button>
-    </form>
+    </div>
   </div>
 {% endblock %}

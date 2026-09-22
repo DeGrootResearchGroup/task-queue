@@ -1,47 +1,58 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-  <h1>Settings</h1>
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-8 col-xl-7">
+      <h1 class="h3 mb-3">Settings</h1>
 
-  <form method="post" action="/settings" class="card">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <form method="post" action="/settings" class="card shadow-sm mb-3">
+        <div class="card-body">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-    <div class="field">
-      <label for="owner_display_name">Display name</label>
-      <input type="text" id="owner_display_name" name="owner_display_name" value="{{ settings_row.owner_display_name }}" required>
+          <div class="mb-3">
+            <label for="owner_display_name" class="form-label">Display name</label>
+            <input type="text" class="form-control" id="owner_display_name" name="owner_display_name" value="{{ settings_row.owner_display_name }}" required>
+          </div>
+
+          <div class="mb-3">
+            <label for="meeting_booking_url" class="form-label">Meeting / booking URL</label>
+            <input type="text" class="form-control" id="meeting_booking_url" name="meeting_booking_url" value="{{ settings_row.meeting_booking_url or '' }}">
+            <div class="form-text">Shown to requesters who should be scheduling a meeting instead of submitting a request.</div>
+          </div>
+
+          <div class="mb-3">
+            <label for="meeting_booking_text" class="form-label">Meeting / booking explanatory text</label>
+            <textarea class="form-control" id="meeting_booking_text" name="meeting_booking_text" rows="2">{{ settings_row.meeting_booking_text or '' }}</textarea>
+          </div>
+
+          <div class="mb-3">
+            <label for="quick_action_minutes" class="form-label">Quick Action threshold (minutes)</label>
+            <input type="number" class="form-control" id="quick_action_minutes" name="quick_action_minutes" min="1" value="{{ settings_row.quick_action_minutes }}" required>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-6">
+              <label for="urgency_green_days" class="form-label">Green threshold (days)</label>
+              <input type="number" class="form-control" id="urgency_green_days" name="urgency_green_days" min="0" value="{{ settings_row.urgency_green_days }}" required>
+              <div class="form-text">More days remaining than this shows green.</div>
+            </div>
+            <div class="col-6">
+              <label for="urgency_red_days" class="form-label">Red threshold (days)</label>
+              <input type="number" class="form-control" id="urgency_red_days" name="urgency_red_days" min="0" value="{{ settings_row.urgency_red_days }}" required>
+              <div class="form-text">This many days remaining (or overdue) shows red.</div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary mt-4">Save Settings</button>
+        </div>
+      </form>
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted">Security</h2>
+          <p class="text-muted small mb-0">The Owner password is set via the <code>OWNER_PASSWORD_HASH</code> environment variable. Use <code>scripts/hash_password.py</code> to generate a new hash, update your <code>.env</code>, and restart the app.</p>
+        </div>
+      </div>
     </div>
-
-    <div class="field">
-      <label for="meeting_booking_url">Meeting / booking URL</label>
-      <input type="text" id="meeting_booking_url" name="meeting_booking_url" value="{{ settings_row.meeting_booking_url or '' }}">
-      <div class="help">Shown to requesters who should be scheduling a meeting instead of submitting a request.</div>
-    </div>
-
-    <div class="field">
-      <label for="meeting_booking_text">Meeting / booking explanatory text</label>
-      <textarea id="meeting_booking_text" name="meeting_booking_text">{{ settings_row.meeting_booking_text or '' }}</textarea>
-    </div>
-
-    <div class="field">
-      <label for="quick_action_minutes">Quick Action threshold (minutes)</label>
-      <input type="number" id="quick_action_minutes" name="quick_action_minutes" min="1" value="{{ settings_row.quick_action_minutes }}" required>
-    </div>
-
-    <div class="field">
-      <label for="urgency_green_days">Green threshold (days remaining, above this)</label>
-      <input type="number" id="urgency_green_days" name="urgency_green_days" min="0" value="{{ settings_row.urgency_green_days }}" required>
-    </div>
-
-    <div class="field">
-      <label for="urgency_red_days">Red threshold (days remaining, at or below this / overdue)</label>
-      <input type="number" id="urgency_red_days" name="urgency_red_days" min="0" value="{{ settings_row.urgency_red_days }}" required>
-    </div>
-
-    <button type="submit" class="btn btn-primary">Save Settings</button>
-  </form>
-
-  <div class="card">
-    <h2>Security</h2>
-    <p class="muted small">The Owner password is set via the <code>OWNER_PASSWORD_HASH</code> environment variable. Use <code>scripts/hash_password.py</code> to generate a new hash, update your <code>.env</code>, and restart the app.</p>
   </div>
 {% endblock %}

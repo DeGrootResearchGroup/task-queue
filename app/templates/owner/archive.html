@@ -2,60 +2,60 @@
 {% import "_macros.html" as m %}
 {% block title %}Archive{% endblock %}
 {% block content %}
-  <h1>Archive</h1>
+  <h1 class="h3 mb-3">Archive</h1>
 
-  <form method="get" action="/archive" class="card">
-    <div class="field">
-      <label for="q">Search</label>
-      <input type="text" id="q" name="q" value="{{ q }}" placeholder="Request ID, title, requester name or email">
+  <form method="get" action="/archive" class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="mb-3">
+        <label for="q" class="form-label">Search</label>
+        <input type="text" class="form-control" id="q" name="q" value="{{ q }}" placeholder="Request ID, title, requester name or email">
+      </div>
+      <div class="row g-3">
+        <div class="col-6 col-md-3">
+          <label for="status" class="form-label">Status</label>
+          <select class="form-select" id="status" name="status">
+            <option value="" {{ 'selected' if not status }}>All archived</option>
+            <option value="done" {{ 'selected' if status == 'done' }}>Completed</option>
+            <option value="declined" {{ 'selected' if status == 'declined' }}>Declined</option>
+            <option value="withdrawn" {{ 'selected' if status == 'withdrawn' }}>Withdrawn</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label for="request_class" class="form-label">Class</label>
+          <select class="form-select" id="request_class" name="request_class">
+            <option value="" {{ 'selected' if not request_class }}>All</option>
+            <option value="quick" {{ 'selected' if request_class == 'quick' }}>Quick Action</option>
+            <option value="long" {{ 'selected' if request_class == 'long' }}>Long Action</option>
+          </select>
+        </div>
+        <div class="col-6 col-md-3">
+          <label for="date_from" class="form-label">From</label>
+          <input type="date" class="form-control" id="date_from" name="date_from" value="{{ date_from }}">
+        </div>
+        <div class="col-6 col-md-3">
+          <label for="date_to" class="form-label">To</label>
+          <input type="date" class="form-control" id="date_to" name="date_to" value="{{ date_to }}">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary mt-3">Search</button>
     </div>
-    <div style="display:flex; gap:1rem; flex-wrap:wrap;">
-      <div class="field" style="flex:1; min-width:160px;">
-        <label for="status">Status</label>
-        <select id="status" name="status">
-          <option value="" {{ 'selected' if not status }}>All archived</option>
-          <option value="done" {{ 'selected' if status == 'done' }}>Completed</option>
-          <option value="declined" {{ 'selected' if status == 'declined' }}>Declined</option>
-          <option value="withdrawn" {{ 'selected' if status == 'withdrawn' }}>Withdrawn</option>
-        </select>
-      </div>
-      <div class="field" style="flex:1; min-width:160px;">
-        <label for="request_class">Class</label>
-        <select id="request_class" name="request_class">
-          <option value="" {{ 'selected' if not request_class }}>All</option>
-          <option value="quick" {{ 'selected' if request_class == 'quick' }}>Quick Action</option>
-          <option value="long" {{ 'selected' if request_class == 'long' }}>Long Action</option>
-        </select>
-      </div>
-      <div class="field" style="flex:1; min-width:140px;">
-        <label for="date_from">From</label>
-        <input type="date" id="date_from" name="date_from" value="{{ date_from }}">
-      </div>
-      <div class="field" style="flex:1; min-width:140px;">
-        <label for="date_to">To</label>
-        <input type="date" id="date_to" name="date_to" value="{{ date_to }}">
-      </div>
-    </div>
-    <button type="submit" class="btn btn-primary">Search</button>
   </form>
 
-  <section class="section">
+  <div class="card section-card shadow-sm">
     {% if results %}
-      <ul class="row-list">
+      <div class="list-group list-group-flush">
         {% for req in results %}
-          <li>
-            <a class="row" href="/requests/{{ req.id }}">
-              <span class="row-main">
-                <span class="row-title">{{ req.title }}</span>
-                <span class="row-meta">{{ req.public_number }} &middot; {{ req.requester_name }} &middot; updated {{ req.updated_at.strftime('%b %-d, %Y') }}</span>
-              </span>
-              {{ m.status_pill(req.status.value) }}
-            </a>
-          </li>
+          <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="/requests/{{ req.id }}">
+            <div class="flex-grow-1 min-width-0">
+              <div class="row-title fw-semibold text-truncate">{{ req.title }}</div>
+              <div class="small text-muted">{{ req.public_number }} &middot; {{ req.requester_name }} &middot; updated {{ req.updated_at.strftime('%b %-d, %Y') }}</div>
+            </div>
+            {{ m.status_pill(req.status.value) }}
+          </a>
         {% endfor %}
-      </ul>
+      </div>
     {% else %}
       <p class="empty-state">No matching requests.</p>
     {% endif %}
-  </section>
+  </div>
 {% endblock %}

@@ -84,3 +84,25 @@ def test_tracking_page_hides_other_requesters(client):
     )
     track = client.get(resp.headers["location"])
     assert "Alice" not in track.text
+
+
+def test_head_request_to_submission_form_returns_empty_body(client):
+    resp = client.request("HEAD", "/")
+    assert resp.status_code == 200
+    assert resp.content == b""
+    assert int(resp.headers["content-length"]) > 0
+
+
+def test_head_request_to_tracking_page(client):
+    csrf, rendered_at = _get_submit_form_tokens(client)
+    created = client.post("/", data=_valid_payload(csrf, rendered_at), follow_redirects=False)
+    tracking_url = created.headers["location"]
+
+    resp = client.request("HEAD", tracking_url)
+    assert resp.status_code == 200
+    assert resp.content == b""
+
+
+def test_head_request_to_unknown_tracking_token_still_404s(client):
+    resp = client.request("HEAD", "/r/does-not-exist")
+    assert resp.status_code == 404

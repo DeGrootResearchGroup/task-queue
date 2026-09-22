@@ -67,7 +67,7 @@ def _submit_form_context(
     }
 
 
-@router.get("/")
+@router.api_route("/", methods=["GET", "HEAD"])
 def submit_form(request: Request, settings_row: AppSettings = Depends(get_app_settings)):
     return render(
         request,
@@ -186,7 +186,7 @@ def _tracking_context(db: Session, req: RequestModel, settings_row: AppSettings)
     return ctx
 
 
-@router.get("/r/{token}")
+@router.api_route("/r/{token}", methods=["GET", "HEAD"])
 def track(
     token: str,
     request: Request,

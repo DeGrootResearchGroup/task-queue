@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   app:
     build: .
@@ -9,6 +15,7 @@ services:
       - "8000"
     networks:
       - internal
+    logging: *default-logging
 
   caddy:
     image: caddy:2-alpine
@@ -24,6 +31,7 @@ services:
       - internal
     depends_on:
       - app
+    logging: *default-logging
     # Without this, containers inherit the host's /etc/resolv.conf, which on
     # systemd-resolved hosts (e.g. Ubuntu) points at 127.0.0.53 — the host's
     # local stub resolver, unreachable from inside a container. That breaks

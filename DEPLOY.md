@@ -120,7 +120,7 @@ curl -sD - -o /dev/null https://tasks.chrisdegroot.ca/
 ```
 
 The SQLite database lives in the `task_queue_data` named volume and
-survives rebuilds. Back it up with:
+survives rebuilds. For a quick one-off backup:
 
 ```bash
 docker compose exec app python3 -c "
@@ -136,6 +136,45 @@ docker compose exec app rm /app/data/backup.db
 (The image doesn't include the `sqlite3` CLI, only Python's built-in
 `sqlite3` module — hence the inline script above instead of the more common
 `sqlite3 ... ".backup"` one-liner.)
+
+For real, ongoing protection you want this automated and off-box — see the
+next section.
+
+## Automated off-box backups (Backblaze B2)
+
+A single SQLite file with no automated, off-box backup is one disk failure
+from total data loss. [`scripts/backup_to_b2.sh`](scripts/backup_to_b2.sh)
+does the same consistent-snapshot backup as above, then uploads it to a
+Backblaze B2 bucket via `rclone`, on a nightly cron schedule. The script's
+own header comment has the full walkthrough; summary:
+
+```bash
+# 1. Install rclone
+curl https://rclone.org/install.sh | sudo bash
+
+# 2. In the B2 web console: create a bucket (e.g. "task-queue-backups")
+#    and an Application Key scoped to just that bucket (not the Master
+#    Application Key).
+
+# 3. Configure the rclone remote (name it exactly "b2")
+rclone config
+
+# 4. Test it once by hand
+sudo bash /opt/task-queue/scripts/backup_to_b2.sh
+
+# 5. Add to root's crontab to run nightly at 3am
+sudo crontab -e
+# add this line:
+0 3 * * * /opt/task-queue/scripts/backup_to_b2.sh >> /var/log/task-queue-backup.log 2>&1
+```
+
+The script keeps the last 14 days of backups locally (`/opt/task-queue/backups/`)
+and prunes older ones automatically; it doesn't prune the B2 side, since a
+bucket-level Lifecycle Rule (configurable in B2's web console) handles that
+more reliably than a script guessing at retention. At this file's size (a
+personal request queue's DB stays in the low single-digit MB for a long
+time), B2's free 10GB tier comfortably covers years of nightly backups even
+without pruning the remote side at all.
 
 ## Email notifications (optional)
 

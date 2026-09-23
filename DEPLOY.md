@@ -185,7 +185,6 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=your-sending-address@gmail.com
 SMTP_PASSWORD=your-16-character-app-password
-SMTP_FROM_NAME=Personal Request Queue
 OWNER_NOTIFICATION_EMAIL=you@example.com   # optional; leave blank to skip Owner-facing pings
 ```
 
@@ -195,6 +194,10 @@ login password — Google's SMTP relay requires it. Generate one at
 (requires 2-Step Verification to already be enabled on that Google account).
 It's 16 lowercase letters with no `$` or other special characters, so unlike
 `OWNER_PASSWORD_HASH` there's no Compose escaping gotcha here.
+
+The sender display name isn't set via `.env` — it's derived from the **Owner
+display name** field on the `/settings` page, shown as `<name>'s Task Queue`.
+Change it there if you want a different sender name.
 
 Then `docker compose up -d` to pick up the new `.env` values (no rebuild
 needed — this is only an environment variable change). The Settings page in

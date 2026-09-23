@@ -155,6 +155,23 @@
       </div>
       {% endif %}
 
+      {% set answered_info_requests = req.info_requests|selectattr('responded_at')|list %}
+      {% if answered_info_requests %}
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted">Questions &amp; responses</h2>
+          {% for ir in answered_info_requests %}
+            <div class="mb-3">
+              <div class="small text-muted">{{ ir.requested_at.strftime('%B %-d, %Y') }} &mdash; {{ settings_row.owner_display_name if settings_row else 'Owner' }}</div>
+              <blockquote class="mb-2">{{ ir.owner_question }}</blockquote>
+              <div class="small text-muted">{{ ir.responded_at.strftime('%B %-d, %Y') }} &mdash; You</div>
+              <div style="white-space: pre-wrap;">{{ ir.requester_response }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
       {% if req.status.value not in ('done', 'declined', 'withdrawn') %}
       <div class="card mb-3">
         <div class="card-body">

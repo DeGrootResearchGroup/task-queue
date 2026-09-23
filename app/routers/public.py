@@ -161,7 +161,7 @@ async def submit(
 
     base_url = str(request.base_url)
     background_tasks.add_task(notify_requester_received, base_url, req, settings_row)
-    background_tasks.add_task(notify_owner_new_request, base_url, req)
+    background_tasks.add_task(notify_owner_new_request, base_url, req, settings_row)
 
     return RedirectResponse(url=f"/r/{req.access_token}", status_code=303)
 
@@ -221,6 +221,7 @@ def add_information(
     honeypot_value: str = Form("", alias=HONEYPOT_FIELD),
     rendered_at: str = Form("", alias=FORM_RENDERED_AT_FIELD),
     db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
 ):
     if is_spam(honeypot_value, rendered_at):
         # Silently pretend success, same as the main submission form — don't
@@ -236,7 +237,7 @@ def add_information(
     sm_add_information(db, req, content)
     commit_and_refresh(db, req)
 
-    background_tasks.add_task(notify_owner_requester_update, str(request.base_url), req, content)
+    background_tasks.add_task(notify_owner_requester_update, str(request.base_url), req, content, settings_row)
 
     flash(request, "Additional information added.", "success")
     return RedirectResponse(url=f"/r/{token}", status_code=303)
@@ -252,6 +253,7 @@ def respond(
     honeypot_value: str = Form("", alias=HONEYPOT_FIELD),
     rendered_at: str = Form("", alias=FORM_RENDERED_AT_FIELD),
     db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
 ):
     if is_spam(honeypot_value, rendered_at):
         return RedirectResponse(url=f"/r/{token}", status_code=303)
@@ -260,7 +262,9 @@ def respond(
     respond_to_information(db, req, response)
     commit_and_refresh(db, req)
 
-    background_tasks.add_task(notify_owner_requester_update, str(request.base_url), req, response.strip())
+    background_tasks.add_task(
+        notify_owner_requester_update, str(request.base_url), req, response.strip(), settings_row
+    )
 
     flash(request, "Response received. Your request has returned for processing.", "success")
     return RedirectResponse(url=f"/r/{token}", status_code=303)

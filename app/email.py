@@ -15,7 +15,7 @@ from app.config import get_settings
 logger = logging.getLogger("app.email")
 
 
-def send_email(to: str, subject: str, body: str) -> None:
+def send_email(to: str, subject: str, body: str, from_name: str) -> None:
     settings = get_settings()
     if not settings.email_enabled:
         logger.debug("Email notifications not configured; skipping send to %s", to)
@@ -25,7 +25,7 @@ def send_email(to: str, subject: str, body: str) -> None:
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = formataddr((settings.smtp_from_name, settings.smtp_username))
+    msg["From"] = formataddr((from_name, settings.smtp_username))
     msg["To"] = to
     msg.set_content(body)
 

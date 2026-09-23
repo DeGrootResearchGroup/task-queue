@@ -21,7 +21,7 @@ def test_send_email_noop_when_not_configured(monkeypatch):
     monkeypatch.setattr(settings, "smtp_password", "")
 
     with patch("app.email.smtplib.SMTP") as mock_smtp:
-        send_email("someone@example.com", "Subject", "Body")
+        send_email("someone@example.com", "Subject", "Body", "Sender")
         mock_smtp.assert_not_called()
 
 
@@ -31,7 +31,7 @@ def test_send_email_noop_with_blank_recipient(monkeypatch):
     monkeypatch.setattr(settings, "smtp_password", "app-password")
 
     with patch("app.email.smtplib.SMTP") as mock_smtp:
-        send_email("", "Subject", "Body")
+        send_email("", "Subject", "Body", "Sender")
         mock_smtp.assert_not_called()
 
 
@@ -41,13 +41,12 @@ def test_send_email_sends_via_starttls_with_correct_content(monkeypatch):
     monkeypatch.setattr(settings, "smtp_port", 587)
     monkeypatch.setattr(settings, "smtp_username", "bot@example.com")
     monkeypatch.setattr(settings, "smtp_password", "app-password")
-    monkeypatch.setattr(settings, "smtp_from_name", "Test Sender")
 
     mock_server = MagicMock()
     mock_server.__enter__.return_value = mock_server
 
     with patch("app.email.smtplib.SMTP", return_value=mock_server) as mock_smtp:
-        send_email("recipient@example.com", "Hello", "Body text")
+        send_email("recipient@example.com", "Hello", "Body text", "Test Sender")
 
     mock_smtp.assert_called_once_with("smtp.gmail.com", 587, timeout=10)
     mock_server.starttls.assert_called_once()
@@ -68,4 +67,4 @@ def test_send_email_swallows_smtp_errors(monkeypatch):
     monkeypatch.setattr(settings, "smtp_password", "app-password")
 
     with patch("app.email.smtplib.SMTP", side_effect=OSError("connection refused")):
-        send_email("recipient@example.com", "Hello", "Body")  # must not raise
+        send_email("recipient@example.com", "Hello", "Body", "Sender")  # must not raise

@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_username: str = ""
     smtp_password: str = ""
-    smtp_from_name: str = "Personal Request Queue"
     # Where Owner-facing pings (new submission, requester responded) go.
     # Separate from smtp_username since that's the *sending* account and
     # this may be a different inbox the Owner actually reads.

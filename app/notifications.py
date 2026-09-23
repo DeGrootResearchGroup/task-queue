@@ -21,6 +21,10 @@ def _admin_url(base_url: str, req: RequestModel) -> str:
     return f"{base_url}requests/{req.id}"
 
 
+def _from_name(settings_row: AppSettings) -> str:
+    return f"{settings_row.owner_display_name}'s Task Queue"
+
+
 def notify_requester_received(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
     if req.request_class.value == "quick":
         status_line = "It's a Quick Action, so it's already in the queue to be processed shortly."
@@ -33,7 +37,9 @@ def notify_requester_received(base_url: str, req: RequestModel, settings_row: Ap
         f"Track its status any time at:\n{_tracking_url(base_url, req)}\n\n"
         f"— {settings_row.owner_display_name}"
     )
-    send_email(req.requester_email, f"[{req.public_number}] Request received: {req.title}", body)
+    send_email(
+        req.requester_email, f"[{req.public_number}] Request received: {req.title}", body, _from_name(settings_row)
+    )
 
 
 def notify_requester_accepted(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
@@ -43,7 +49,9 @@ def notify_requester_accepted(base_url: str, req: RequestModel, settings_row: Ap
         f"Track its position any time at:\n{_tracking_url(base_url, req)}\n\n"
         f"— {settings_row.owner_display_name}"
     )
-    send_email(req.requester_email, f"[{req.public_number}] Request accepted: {req.title}", body)
+    send_email(
+        req.requester_email, f"[{req.public_number}] Request accepted: {req.title}", body, _from_name(settings_row)
+    )
 
 
 def notify_requester_declined(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
@@ -54,7 +62,9 @@ def notify_requester_declined(base_url: str, req: RequestModel, settings_row: Ap
         f"Details at:\n{_tracking_url(base_url, req)}\n\n"
         f"— {settings_row.owner_display_name}"
     )
-    send_email(req.requester_email, f"[{req.public_number}] Request declined: {req.title}", body)
+    send_email(
+        req.requester_email, f"[{req.public_number}] Request declined: {req.title}", body, _from_name(settings_row)
+    )
 
 
 def notify_requester_needs_information(
@@ -68,7 +78,7 @@ def notify_requester_needs_information(
         f"Respond at:\n{_tracking_url(base_url, req)}\n\n"
         f"— {settings_row.owner_display_name}"
     )
-    send_email(req.requester_email, f"[{req.public_number}] Action needed: {req.title}", body)
+    send_email(req.requester_email, f"[{req.public_number}] Action needed: {req.title}", body, _from_name(settings_row))
 
 
 def notify_requester_completed(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
@@ -79,10 +89,12 @@ def notify_requester_completed(base_url: str, req: RequestModel, settings_row: A
         f"Details at:\n{_tracking_url(base_url, req)}\n\n"
         f"— {settings_row.owner_display_name}"
     )
-    send_email(req.requester_email, f"[{req.public_number}] Request completed: {req.title}", body)
+    send_email(
+        req.requester_email, f"[{req.public_number}] Request completed: {req.title}", body, _from_name(settings_row)
+    )
 
 
-def notify_owner_new_request(base_url: str, req: RequestModel) -> None:
+def notify_owner_new_request(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
     settings = get_settings()
     if not settings.owner_notification_email:
         return
@@ -97,10 +109,11 @@ def notify_owner_new_request(base_url: str, req: RequestModel) -> None:
         settings.owner_notification_email,
         f"[{req.public_number}] New {kind.lower()}: {req.title}",
         body,
+        _from_name(settings_row),
     )
 
 
-def notify_owner_requester_update(base_url: str, req: RequestModel, content: str) -> None:
+def notify_owner_requester_update(base_url: str, req: RequestModel, content: str, settings_row: AppSettings) -> None:
     settings = get_settings()
     if not settings.owner_notification_email:
         return
@@ -113,4 +126,5 @@ def notify_owner_requester_update(base_url: str, req: RequestModel, content: str
         settings.owner_notification_email,
         f"[{req.public_number}] New information: {req.title}",
         body,
+        _from_name(settings_row),
     )

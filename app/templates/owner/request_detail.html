@@ -207,6 +207,23 @@
       </div>
       {% endif %}
 
+      {% set answered_info_requests = req.info_requests|selectattr('responded_at')|list %}
+      {% if answered_info_requests %}
+      <div class="card mb-3">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted mb-3">Questions &amp; responses</h2>
+          {% for ir in answered_info_requests %}
+            <div class="mb-3">
+              <div class="small text-muted">{{ ir.requested_at.strftime('%B %-d, %Y') }} &mdash; You asked</div>
+              <blockquote class="mb-2">{{ ir.owner_question }}</blockquote>
+              <div class="small text-muted">{{ ir.responded_at.strftime('%B %-d, %Y') }} &mdash; {{ req.requester_name }} responded</div>
+              <div style="white-space: pre-wrap;">{{ ir.requester_response }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
       <div class="card mb-3">
         <div class="card-body">
           <h2 class="h6 text-uppercase text-muted">Activity</h2>

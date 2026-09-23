@@ -65,6 +65,12 @@ def test_needs_information_round_trip_restores_queue_position(client):
 
     detail = client.get(f"/requests/{req_id}")
     assert "status-queued" in detail.text
+    assert "What is the target audience?" in detail.text
+    assert "Graduate students." in detail.text
+
+    track = client.get(tracking_url)
+    assert "What is the target audience?" in track.text
+    assert "Graduate students." in track.text
 
 
 def test_requester_can_withdraw(client):

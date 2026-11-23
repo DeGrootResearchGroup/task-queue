@@ -11,7 +11,15 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import get_settings
 from app.db import Base, engine
 from app.rate_limit import limiter
-from app.routers import archive, dashboard, owner_auth, public, quick_session, settings as settings_router
+from app.routers import (
+    archive,
+    calendar,
+    dashboard,
+    owner_auth,
+    public,
+    quick_session,
+    settings as settings_router,
+)
 from app.state_machine import TransitionError
 from app.templating import templates
 
@@ -54,3 +62,4 @@ app.include_router(dashboard.router)
 app.include_router(quick_session.router)
 app.include_router(archive.router)
 app.include_router(settings_router.router)
+app.include_router(calendar.router)

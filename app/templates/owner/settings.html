@@ -62,6 +62,42 @@
         </div>
       </div>
 
+      <div class="card shadow-sm mb-3">
+        <div class="card-body">
+          <h2 class="h6 text-uppercase text-muted">Calendar feed</h2>
+          <p class="text-muted small">
+            A read-only <code>.ics</code> feed of every open request that has a desired
+            completion date, as all-day markers. Subscribe to it from Apple Calendar
+            (File &rarr; New Calendar Subscription) rather than importing it, so it stays
+            in step with the queue. Entries are published as free time and never affect
+            your availability.
+          </p>
+          {% if calendar_url %}
+            <p class="mb-2"><span class="badge text-bg-success">Enabled</span></p>
+            <div class="input-group input-group-sm mb-2">
+              <input type="text" class="form-control font-monospace" value="{{ calendar_url }}" readonly aria-label="Calendar feed URL">
+            </div>
+            <p class="text-muted small">Anyone with this URL can read your dated requests. Treat it as a password.</p>
+            <div class="d-flex flex-wrap gap-2">
+              <form method="post" action="/settings/calendar-feed">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-outline-secondary btn-sm">Replace URL</button>
+              </form>
+              <form method="post" action="/settings/calendar-feed/disable">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm">Disable feed</button>
+              </form>
+            </div>
+          {% else %}
+            <p class="mb-2"><span class="badge text-bg-secondary">Disabled</span></p>
+            <form method="post" action="/settings/calendar-feed">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="btn btn-primary btn-sm">Enable calendar feed</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+
       <div class="card shadow-sm">
         <div class="card-body">
           <h2 class="h6 text-uppercase text-muted">Security</h2>

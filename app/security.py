@@ -22,6 +22,15 @@ def generate_access_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def generate_calendar_token() -> str:
+    """Secret path segment for the .ics feed.
+
+    Same strength as an access token: a subscribed calendar client can't
+    log in, so the URL is the entire credential and has to be unguessable.
+    """
+    return secrets.token_urlsafe(32)
+
+
 def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 

@@ -192,6 +192,11 @@ class AppSettings(Base):
     quick_action_minutes: Mapped[int] = mapped_column(Integer, default=10)
     urgency_green_days: Mapped[int] = mapped_column(Integer, default=7)
     urgency_red_days: Mapped[int] = mapped_column(Integer, default=2)
+    # Secret path segment for the read-only .ics feed. Null until the Owner
+    # generates one from /settings; regenerating it revokes every existing
+    # subscription, which is the only revocation mechanism a subscribed
+    # calendar feed can have.
+    calendar_token: Mapped[str | None] = mapped_column(String(64), unique=True, default=None)
 
 
 class RequestCounter(Base):

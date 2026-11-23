@@ -58,10 +58,20 @@ class TestAcceptAndQueue:
         with pytest.raises(TransitionError):
             accept_and_queue(db_session, req)
 
-    def test_rejects_quick_action(self, db_session):
+    def test_accepts_submitted_quick_action_into_the_quick_queue(self, db_session):
+        # A Quick Action only reaches `submitted` via a server-side insert
+        # (scripts/add_request.py); when it does, it gets the same review
+        # step and lands at the bottom of the Quick queue, not the Long one.
+        long_queued = add(
+            db_session,
+            make_request(status=RequestStatus.queued, queue_position=1, public_number="REQ-LONG"),
+        )
         req = add(db_session, make_request(request_class=RequestClass.quick, status=RequestStatus.submitted))
-        with pytest.raises(TransitionError):
-            accept_and_queue(db_session, req)
+        accept_and_queue(db_session, req)
+        assert req.status == RequestStatus.queued
+        assert req.request_class == RequestClass.quick
+        assert req.queue_position == 1
+        assert long_queued.queue_position == 1
 
 
 class TestDecline:

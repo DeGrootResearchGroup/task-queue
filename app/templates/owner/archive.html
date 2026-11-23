@@ -48,7 +48,7 @@
           <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="/requests/{{ req.id }}">
             <div class="flex-grow-1 min-width-0">
               <div class="row-title fw-semibold text-truncate">{{ req.title }}</div>
-              <div class="small text-muted">{{ req.public_number }} &middot; {{ req.requester_name }} &middot; updated {{ req.updated_at.strftime('%b %-d, %Y') }}</div>
+              <div class="small text-muted">{{ req.public_number }} &middot; {{ m.origin_line(req) }} &middot; updated {{ req.updated_at.strftime('%b %-d, %Y') }}</div>
             </div>
             {{ m.status_pill(req.status.value) }}
           </a>

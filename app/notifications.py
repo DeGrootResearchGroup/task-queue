@@ -7,10 +7,32 @@ none of them return anything meaningful, and app.email.send_email already
 swallows its own errors, so these are safe to fire-and-forget.
 """
 
+import functools
+from collections.abc import Callable
+
 from app.config import get_settings
 from app.email import send_email
 from app.models import AppSettings
 from app.models import Request as RequestModel
+
+
+def _requires_requester(fn: Callable) -> Callable:
+    """No-op the wrapped notification when the request has no requester.
+
+    `email` and `manual` requests are the Owner's own obligations and carry
+    no requester_name/requester_email, so every requester-facing message is
+    meaningless for them. Guarding here rather than at each call site keeps
+    the Owner's dashboard actions (Accept, Decline, Complete, ...) free of
+    source-specific branching.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(base_url: str, req: RequestModel, *args, **kwargs):
+        if not req.requester_email:
+            return None
+        return fn(base_url, req, *args, **kwargs)
+
+    return wrapper
 
 
 def _tracking_url(base_url: str, req: RequestModel) -> str:
@@ -25,6 +47,7 @@ def _from_name(settings_row: AppSettings) -> str:
     return f"{settings_row.owner_display_name}'s Task Queue"
 
 
+@_requires_requester
 def notify_requester_received(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
     if req.request_class.value == "quick":
         status_line = "It's a Quick Action, so it's already in the queue to be processed shortly."
@@ -42,6 +65,7 @@ def notify_requester_received(base_url: str, req: RequestModel, settings_row: Ap
     )
 
 
+@_requires_requester
 def notify_requester_accepted(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
     body = (
         f"Hi {req.requester_name},\n\n"
@@ -54,6 +78,7 @@ def notify_requester_accepted(base_url: str, req: RequestModel, settings_row: Ap
     )
 
 
+@_requires_requester
 def notify_requester_declined(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
     reason_line = f"\n\nReason: {req.decline_reason}" if req.decline_reason else ""
     body = (
@@ -67,6 +92,7 @@ def notify_requester_declined(base_url: str, req: RequestModel, settings_row: Ap
     )
 
 
+@_requires_requester
 def notify_requester_needs_information(
     base_url: str, req: RequestModel, question: str, settings_row: AppSettings
 ) -> None:
@@ -81,6 +107,7 @@ def notify_requester_needs_information(
     send_email(req.requester_email, f"[{req.public_number}] Action needed: {req.title}", body, _from_name(settings_row))
 
 
+@_requires_requester
 def notify_requester_completed(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
     note_line = f"\n\n{req.completion_note}" if req.completion_note else ""
     body = (

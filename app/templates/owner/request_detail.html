@@ -11,13 +11,21 @@
         {{ req.public_number }} &middot;
         {{ 'Quick Action' if req.request_class.value == 'quick' else 'Long Action' }} &middot;
         {{ m.status_pill(req.status.value) }}
+        {{ m.source_pill(req.source.value) }}
       </p>
 
       <div class="card mb-3">
         <div class="card-body">
           <div class="mb-3">
-            <div class="text-muted small fw-semibold text-uppercase mb-1">Requester</div>
-            <div>{{ req.requester_name }} &lt;{{ req.requester_email }}&gt;</div>
+            {% if req.requester_name or req.requester_email %}
+              <div class="text-muted small fw-semibold text-uppercase mb-1">Requester</div>
+              <div>{{ req.requester_name }} &lt;{{ req.requester_email }}&gt;</div>
+            {% else %}
+              {# No second party: an `email` or `manual` request is one of the
+                 Owner's own obligations, so there is nobody to show here. #}
+              <div class="text-muted small fw-semibold text-uppercase mb-1">Source</div>
+              <div>{{ m.source_label(req.source.value) }}</div>
+            {% endif %}
           </div>
           <div class="mb-3">
             <div class="text-muted small fw-semibold text-uppercase mb-1">Submitted</div>
@@ -216,7 +224,7 @@
             <div class="mb-3">
               <div class="small text-muted">{{ ir.requested_at.strftime('%B %-d, %Y') }} &mdash; You asked</div>
               <blockquote class="mb-2">{{ ir.owner_question }}</blockquote>
-              <div class="small text-muted">{{ ir.responded_at.strftime('%B %-d, %Y') }} &mdash; {{ req.requester_name }} responded</div>
+              <div class="small text-muted">{{ ir.responded_at.strftime('%B %-d, %Y') }} &mdash; {{ m.origin_line(req) }} responded</div>
               <div style="white-space: pre-wrap;">{{ ir.requester_response }}</div>
             </div>
           {% endfor %}

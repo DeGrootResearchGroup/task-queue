@@ -34,3 +34,27 @@
   } %}
   <span class="badge rounded-pill {{ bs_class.get(status, 'text-bg-secondary') }} status-{{ status }}">{{ status_label(status) }}</span>
 {% endmacro %}
+
+{% macro source_label(source) %}
+  {%- if source == 'form' -%}Form
+  {%- elif source == 'email' -%}From email
+  {%- elif source == 'manual' -%}Added by me
+  {%- else -%}{{ source }}
+  {%- endif -%}
+{% endmacro %}
+
+{% macro source_pill(source) %}
+  {# `form` is the ordinary case and the whole point of the app, so it gets
+     no badge — only self-generated admin is marked, which keeps the two
+     visually separable without decorating every row. #}
+  {% if source != 'form' %}
+    <span class="badge rounded-pill text-bg-light border source-{{ source }}">{{ source_label(source) }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro origin_line(req) %}
+  {#- A request with no requester is one of the Owner's own obligations
+      (source `email` or `manual`); naming its source reads better in the
+      secondary line than an empty gap or a literal "None". -#}
+  {{- req.requester_name if req.requester_name else source_label(req.source.value) -}}
+{% endmacro %}

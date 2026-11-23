@@ -16,7 +16,7 @@
     {% else %}
       <div class="card shadow-sm">
         <div class="card-body p-4">
-          <p class="text-muted small mb-1">{{ req.public_number }} &middot; {{ req.requester_name }}</p>
+          <p class="text-muted small mb-1">{{ req.public_number }} &middot; {{ m.origin_line(req) }}</p>
           <h1 class="h3">{{ req.title }}</h1>
 
           {% if req.desired_completion_date %}

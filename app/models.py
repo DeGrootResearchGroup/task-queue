@@ -13,6 +13,19 @@ class RequestClass(str, enum.Enum):
     long = "long"
 
 
+class RequestSource(str, enum.Enum):
+    """Where a request came from.
+
+    The queue was built as a service desk for other people's requests, so
+    self-generated admin needs to stay visually separable from the real
+    thing rather than being mixed into the same undifferentiated list.
+    """
+
+    form = "form"  # a true reverse task — someone else filled in the public form
+    email = "email"  # derived from the Owner's mailbox by a triage sweep
+    manual = "manual"  # added by the Owner directly, or via an assistant
+
+
 class RequestStatus(str, enum.Enum):
     submitted = "submitted"
     queued = "queued"
@@ -54,12 +67,22 @@ class Request(Base):
     public_number: Mapped[str] = mapped_column(String(20), unique=True, index=True)
     access_token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
 
-    requester_name: Mapped[str] = mapped_column(String(200))
-    requester_email: Mapped[str] = mapped_column(String(320))
+    # Nullable because a request need not have a second party: `email` and
+    # `manual` sources are the Owner's own obligations, with nobody to name
+    # or notify. A sentinel ("self@localhost") was the alternative and was
+    # rejected — it would match the Archive's requester search, print as a
+    # fake address on the detail page, and turn "is there a requester?"
+    # into a string comparison against a magic value in every caller.
+    requester_name: Mapped[str | None] = mapped_column(String(200), default=None)
+    requester_email: Mapped[str | None] = mapped_column(String(320), default=None)
 
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str] = mapped_column(Text)
     additional_context: Mapped[str | None] = mapped_column(Text, default=None)
+
+    source: Mapped[RequestSource] = mapped_column(
+        Enum(RequestSource), default=RequestSource.form, server_default=RequestSource.form.value
+    )
 
     request_class: Mapped[RequestClass] = mapped_column(Enum(RequestClass))
     status: Mapped[RequestStatus] = mapped_column(Enum(RequestStatus))

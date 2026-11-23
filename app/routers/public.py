@@ -17,6 +17,7 @@ from app.models import (
     RequestClass,
     RequestEvent,
     RequestLink,
+    RequestSource,
     RequestStatus,
 )
 from app.notifications import notify_owner_new_request, notify_owner_requester_update, notify_requester_received
@@ -137,6 +138,10 @@ async def submit(
         access_token=generate_access_token(),
         requester_name=data.requester_name.strip(),
         requester_email=data.requester_email.strip(),
+        # Stated explicitly rather than left to the column default: this is
+        # the one route the public can reach, and anything arriving through
+        # it is by definition a request from someone else.
+        source=RequestSource.form,
         title=data.title.strip(),
         description=data.description.strip(),
         additional_context=data.additional_context.strip() or None,

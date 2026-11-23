@@ -75,15 +75,20 @@ def _remove_from_queue_and_renumber(db: Session, req: Request) -> None:
 
 
 def accept_and_queue(db: Session, req: Request) -> None:
-    if req.request_class != RequestClass.long or req.status != RequestStatus.submitted:
-        raise TransitionError("Only a Submitted Long Action can be accepted.")
+    # Keyed on status alone, not status + class. Public form submissions
+    # still send Quick Actions straight to `queued` and never reach here,
+    # but a server-side insert can deliberately park a Quick Action at
+    # `submitted` so it gets the same review step; accepting one puts it at
+    # the bottom of the Quick queue, which is exactly the right outcome.
+    if req.status != RequestStatus.submitted:
+        raise TransitionError("Only a Submitted request can be accepted.")
     _insert_into_queue(db, req, target_position=None)  # bottom of queue
     _log(db, req, EventType.accepted)
 
 
 def decline(db: Session, req: Request, reason: str) -> None:
-    if req.request_class != RequestClass.long or req.status != RequestStatus.submitted:
-        raise TransitionError("Only a Submitted Long Action can be declined.")
+    if req.status != RequestStatus.submitted:
+        raise TransitionError("Only a Submitted request can be declined.")
     if not reason or not reason.strip():
         raise TransitionError("A decline reason is required.")
     req.status = RequestStatus.declined

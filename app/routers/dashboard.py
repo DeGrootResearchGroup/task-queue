@@ -2,13 +2,13 @@ from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import commit_and_refresh
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
-from app.models import AppSettings, Request as RequestModel, RequestClass, RequestStatus
+from app.models import AppSettings, Request as RequestModel, RequestClass, RequestSource, RequestStatus
 from app.notifications import (
     notify_requester_accepted,
     notify_requester_completed,
@@ -32,6 +32,16 @@ from app.utils import urgency_level
 
 router = APIRouter(dependencies=[Depends(require_owner)])
 
+# Statuses a request passes through while it is still live work. Used for
+# the per-source counts beside the dashboard's filter, so the numbers track
+# what's actually on the plate rather than everything ever submitted.
+OPEN_STATUSES = (
+    RequestStatus.submitted,
+    RequestStatus.queued,
+    RequestStatus.in_progress,
+    RequestStatus.needs_information,
+)
+
 
 def _get_request_or_404(db: Session, request_id: int) -> RequestModel:
     req = db.get(RequestModel, request_id)
@@ -51,6 +61,19 @@ def _days_text(desired: date | None) -> str:
     return f"{delta}d"
 
 
+def _source_filter(source: str) -> RequestSource | None:
+    """Parses the dashboard's ?source= query parameter.
+
+    Anything unrecognised (including the empty string) means "no filter",
+    so a stale or hand-edited URL degrades to showing everything rather
+    than to an error page or an empty dashboard.
+    """
+    try:
+        return RequestSource(source)
+    except ValueError:
+        return None
+
+
 def _row_ctx(req: RequestModel, settings_row: AppSettings) -> dict:
     return {
         "req": req,
@@ -62,38 +85,70 @@ def _row_ctx(req: RequestModel, settings_row: AppSettings) -> dict:
 @router.get("/dashboard")
 def dashboard(
     request: Request,
+    source: str = "",
     db: Session = Depends(get_db),
     settings_row: AppSettings = Depends(get_app_settings),
 ):
+    active_source = _source_filter(source)
+
+    def scoped(stmt):
+        """Applies the source filter, if one is active, to a section query."""
+        if active_source is None:
+            return stmt
+        return stmt.where(RequestModel.source == active_source)
+
+    # Awaiting review is not restricted to Long Actions: a server-side
+    # insert (scripts/add_request.py) can leave a Quick Action at
+    # `submitted` so it gets the same accept/decline review as anything
+    # else, and those would otherwise be invisible here.
     submitted = db.scalars(
-        select(RequestModel)
-        .where(RequestModel.request_class == RequestClass.long, RequestModel.status == RequestStatus.submitted)
-        .order_by(RequestModel.created_at)
+        scoped(
+            select(RequestModel)
+            .where(RequestModel.status == RequestStatus.submitted)
+            .order_by(RequestModel.created_at)
+        )
     ).all()
 
     in_progress = db.scalars(
-        select(RequestModel)
-        .where(RequestModel.request_class == RequestClass.long, RequestModel.status == RequestStatus.in_progress)
-        .order_by(RequestModel.started_at)
+        scoped(
+            select(RequestModel)
+            .where(RequestModel.request_class == RequestClass.long, RequestModel.status == RequestStatus.in_progress)
+            .order_by(RequestModel.started_at)
+        )
     ).all()
 
     queued = db.scalars(
-        select(RequestModel)
-        .where(RequestModel.request_class == RequestClass.long, RequestModel.status == RequestStatus.queued)
-        .order_by(RequestModel.queue_position)
+        scoped(
+            select(RequestModel)
+            .where(RequestModel.request_class == RequestClass.long, RequestModel.status == RequestStatus.queued)
+            .order_by(RequestModel.queue_position)
+        )
     ).all()
 
     quick_pending = db.scalars(
-        select(RequestModel)
-        .where(RequestModel.request_class == RequestClass.quick, RequestModel.status == RequestStatus.queued)
-        .order_by(RequestModel.created_at)
+        scoped(
+            select(RequestModel)
+            .where(RequestModel.request_class == RequestClass.quick, RequestModel.status == RequestStatus.queued)
+            .order_by(RequestModel.created_at)
+        )
     ).all()
 
     needs_info = db.scalars(
-        select(RequestModel)
-        .where(RequestModel.status == RequestStatus.needs_information)
-        .order_by(RequestModel.updated_at)
+        scoped(
+            select(RequestModel)
+            .where(RequestModel.status == RequestStatus.needs_information)
+            .order_by(RequestModel.updated_at)
+        )
     ).all()
+
+    source_counts = {
+        s.value: db.scalar(
+            select(func.count())
+            .select_from(RequestModel)
+            .where(RequestModel.source == s, RequestModel.status.in_(OPEN_STATUSES))
+        )
+        for s in RequestSource
+    }
 
     csrf_token = get_or_create_csrf_token(request)
     return render(
@@ -108,6 +163,8 @@ def dashboard(
             "quick_pending": quick_pending[:8],
             "quick_pending_count": len(quick_pending),
             "needs_info": needs_info,
+            "active_source": active_source.value if active_source else "",
+            "source_counts": source_counts,
         },
     )
 

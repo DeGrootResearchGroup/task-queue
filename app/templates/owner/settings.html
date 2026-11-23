@@ -1,6 +1,126 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
+  {#- One set of fields shared by the "add" form and every row's "edit" form,
+      so the two can't drift. `values` prefills (either the stored commitment
+      or the rejected input being shown back), `errors` is keyed by the same
+      field names, and `uid` keeps label/id pairs unique across the several
+      copies of this form on the page. -#}
+  {% macro commitment_fields(values, errors, uid) %}
+    <div class="mb-2">
+      <label class="form-label" for="title-{{ uid }}">Title</label>
+      <input type="text" class="form-control form-control-sm {{ 'is-invalid' if errors.title }}"
+             id="title-{{ uid }}" name="title" value="{{ values.title or '' }}" required>
+      {% if errors.title %}<div class="invalid-feedback">{{ errors.title }}</div>{% endif %}
+      <div class="form-text">No date in the title — the month and year are added to each occurrence.</div>
+    </div>
+
+    <div class="mb-2">
+      <label class="form-label" for="description-{{ uid }}">What doing it involves</label>
+      <textarea class="form-control form-control-sm {{ 'is-invalid' if errors.description }}"
+                id="description-{{ uid }}" name="description" rows="2" required>{{ values.description or '' }}</textarea>
+      {% if errors.description %}<div class="invalid-feedback">{{ errors.description }}</div>{% endif %}
+    </div>
+
+    <div class="row g-2 mb-2">
+      <div class="col-6">
+        <label class="form-label" for="request_class-{{ uid }}">Type</label>
+        <select class="form-select form-select-sm {{ 'is-invalid' if errors.request_class }}"
+                id="request_class-{{ uid }}" name="request_class">
+          <option value="quick" {{ 'selected' if values.request_class == 'quick' }}>Quick Action</option>
+          <option value="long" {{ 'selected' if (values.request_class or 'long') == 'long' }}>Long Action</option>
+        </select>
+        {% if errors.request_class %}<div class="invalid-feedback">{{ errors.request_class }}</div>{% endif %}
+      </div>
+      <div class="col-6">
+        <label class="form-label" for="source-{{ uid }}">Source</label>
+        <select class="form-select form-select-sm {{ 'is-invalid' if errors.source }}"
+                id="source-{{ uid }}" name="source">
+          <option value="manual" {{ 'selected' if (values.source or 'manual') == 'manual' }}>Added by me</option>
+          <option value="email" {{ 'selected' if values.source == 'email' }}>From email</option>
+        </select>
+        {% if errors.source %}<div class="invalid-feedback">{{ errors.source }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="mb-2">
+      <label class="form-label" for="months-{{ uid }}">Months</label>
+      <input type="text" class="form-control form-control-sm {{ 'is-invalid' if errors.months }}"
+             id="months-{{ uid }}" name="months" value="{{ values.months or '' }}" placeholder="e.g. 4 8 12">
+      {% if errors.months %}<div class="invalid-feedback">{{ errors.months }}</div>{% endif %}
+      <div class="form-text">Month numbers, separated by spaces. Leave blank for every month.</div>
+    </div>
+
+    <div class="row g-2 mb-2">
+      <div class="col-7">
+        <label class="form-label" for="day_rule-{{ uid }}">Day within the month</label>
+        <select class="form-select form-select-sm {{ 'is-invalid' if errors.day_rule }}"
+                id="day_rule-{{ uid }}" name="day_rule">
+          <option value="day_of_month" {{ 'selected' if (values.day_rule or 'day_of_month') == 'day_of_month' }}>Fixed day of the month</option>
+          <option value="business_days_before_month_end" {{ 'selected' if values.day_rule == 'business_days_before_month_end' }}>Business days before month end</option>
+        </select>
+        {% if errors.day_rule %}<div class="invalid-feedback">{{ errors.day_rule }}</div>{% endif %}
+      </div>
+      <div class="col-5">
+        <label class="form-label" for="day_value-{{ uid }}">Value</label>
+        <input type="number" min="0" max="31" class="form-control form-control-sm {{ 'is-invalid' if errors.day_value or errors.day_of_month or errors.business_days_before_month_end }}"
+               id="day_value-{{ uid }}" name="day_value" value="{{ values.day_value or '' }}" required>
+        {% set day_error = errors.day_value or errors.day_of_month or errors.business_days_before_month_end %}
+        {% if day_error %}<div class="invalid-feedback">{{ day_error }}</div>{% endif %}
+      </div>
+    </div>
+    <div class="form-text mb-3">
+      A fixed day is clamped to short months. Counting back from the month end,
+      <code>0</code> is its last business day and <code>1</code> the second-last.
+    </div>
+
+    <div class="row g-2 mb-2">
+      <div class="col-6">
+        <label class="form-label" for="lead_business_days-{{ uid }}">Record this many business days early</label>
+        <input type="number" min="0" class="form-control form-control-sm {{ 'is-invalid' if errors.lead_business_days }}"
+               id="lead_business_days-{{ uid }}" name="lead_business_days" value="{{ values.lead_business_days or '0' }}">
+        {% if errors.lead_business_days %}<div class="invalid-feedback">{{ errors.lead_business_days }}</div>{% endif %}
+        <div class="form-text">Where someone else must act after you.</div>
+      </div>
+      <div class="col-6">
+        <label class="form-label" for="generate_days_ahead-{{ uid }}">Appears this many days before</label>
+        <input type="number" min="0" class="form-control form-control-sm {{ 'is-invalid' if errors.generate_days_ahead }}"
+               id="generate_days_ahead-{{ uid }}" name="generate_days_ahead" value="{{ values.generate_days_ahead or '14' }}">
+        {% if errors.generate_days_ahead %}<div class="invalid-feedback">{{ errors.generate_days_ahead }}</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="mb-2">
+      <label class="form-label" for="date_reason-{{ uid }}">Why the date moved</label>
+      <textarea class="form-control form-control-sm {{ 'is-invalid' if errors.date_reason }}"
+                id="date_reason-{{ uid }}" name="date_reason" rows="2">{{ values.date_reason or '' }}</textarea>
+      {% if errors.date_reason %}<div class="invalid-feedback">{{ errors.date_reason }}</div>{% endif %}
+      <div class="form-text">Carried onto every occurrence, alongside the stated deadline.</div>
+    </div>
+
+    <div class="mb-2">
+      <label class="form-label" for="additional_context-{{ uid }}">Additional context</label>
+      <textarea class="form-control form-control-sm {{ 'is-invalid' if errors.additional_context }}"
+                id="additional_context-{{ uid }}" name="additional_context" rows="2">{{ values.additional_context or '' }}</textarea>
+      {% if errors.additional_context %}<div class="invalid-feedback">{{ errors.additional_context }}</div>{% endif %}
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-8">
+        <label class="form-label" for="reference_url-{{ uid }}">Standing link</label>
+        <input type="text" class="form-control form-control-sm {{ 'is-invalid' if errors.reference_url }}"
+               id="reference_url-{{ uid }}" name="reference_url" value="{{ values.reference_url or '' }}">
+        {% if errors.reference_url %}<div class="invalid-feedback">{{ errors.reference_url }}</div>{% endif %}
+      </div>
+      <div class="col-4">
+        <label class="form-label" for="reference_label-{{ uid }}">Link label</label>
+        <input type="text" class="form-control form-control-sm {{ 'is-invalid' if errors.reference_label }}"
+               id="reference_label-{{ uid }}" name="reference_label" value="{{ values.reference_label or '' }}">
+        {% if errors.reference_label %}<div class="invalid-feedback">{{ errors.reference_label }}</div>{% endif %}
+      </div>
+    </div>
+  {% endmacro %}
+
   <div class="row justify-content-center">
     <div class="col-12 col-lg-8 col-xl-7">
       <h1 class="h3 mb-3">Settings</h1>
@@ -103,32 +223,71 @@
           <h2 class="h6 text-uppercase text-muted">Standing commitments</h2>
           <p class="text-muted small">
             Obligations that arrive on a cycle. Each one produces a request shortly
-            before it falls due, so the email announcing it becomes a confirmation
-            rather than the trigger. Recorded with <code>scripts/add_recurring.py</code>
-            and generated by <code>scripts/generate_recurring.py</code>.
+            before it falls due, so the notice announcing it becomes a confirmation
+            rather than the trigger. Generated daily by
+            <code>scripts/generate_recurring.py</code>.
           </p>
+
           {% if commitments %}
-            <ul class="list-unstyled mb-0">
+            <ul class="list-unstyled mb-3">
               {% for row in commitments %}
+                {% set editing = commitment_form and commitment_form.mode == 'edit' and commitment_form.id == row.commitment.id %}
                 <li class="border-top py-2">
-                  <div class="fw-semibold">
-                    {{ row.commitment.title }}
-                    {% if not row.commitment.active %}<span class="badge text-bg-secondary ms-1">Inactive</span>{% endif %}
+                  <div class="d-flex align-items-start gap-2">
+                    <div class="flex-grow-1 min-width-0">
+                      <div class="fw-semibold">
+                        {{ row.commitment.title }}
+                        {% if not row.commitment.active %}<span class="badge text-bg-secondary ms-1">Inactive</span>{% endif %}
+                      </div>
+                      <div class="text-muted small">
+                        {% if row.stated %}
+                          Next due {{ row.effective.strftime('%b %-d, %Y') }}
+                          {%- if row.effective != row.stated %} (stated {{ row.stated.strftime('%b %-d, %Y') }}){% endif %}
+                        {% else %}
+                          <span class="text-danger">Schedule does not resolve — check its months.</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    <form method="post" action="/settings/recurring/{{ row.commitment.id }}/active">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <input type="hidden" name="active" value="{{ '' if row.commitment.active else 'on' }}">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary">
+                        {{ 'Deactivate' if row.commitment.active else 'Reactivate' }}
+                      </button>
+                    </form>
                   </div>
-                  <div class="text-muted small">
-                    {% if row.stated %}
-                      Next due {{ row.effective.strftime('%b %-d, %Y') }}
-                      {%- if row.effective != row.stated %} (stated {{ row.stated.strftime('%b %-d, %Y') }}){% endif %}
-                    {% else %}
-                      <span class="text-danger">Schedule does not resolve — check its months.</span>
-                    {% endif %}
-                  </div>
+                  <details class="mt-2" {% if editing %}open{% endif %}>
+                    <summary class="small text-muted">Edit</summary>
+                    <form method="post" action="/settings/recurring/{{ row.commitment.id }}" class="card card-body mt-2">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      {{ commitment_fields(
+                           commitment_form.fields if editing else row.fields,
+                           commitment_form.errors if editing else {},
+                           'c%d' % row.commitment.id) }}
+                      <div><button type="submit" class="btn btn-primary btn-sm">Save changes</button></div>
+                    </form>
+                  </details>
                 </li>
               {% endfor %}
             </ul>
           {% else %}
-            <p class="text-muted small mb-0"><em>None recorded.</em></p>
+            <p class="text-muted small"><em>None recorded yet.</em></p>
           {% endif %}
+
+          {% set creating = commitment_form and commitment_form.mode == 'create' %}
+          <details class="border-top pt-3" {% if creating %}open{% endif %}>
+            <summary class="btn btn-primary btn-sm">Add a standing commitment</summary>
+            <form method="post" action="/settings/recurring" class="card card-body mt-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              {{ commitment_fields(commitment_form.fields if creating else {}, commitment_form.errors if creating else {}, 'new') }}
+              <div><button type="submit" class="btn btn-primary btn-sm">Record commitment</button></div>
+            </form>
+          </details>
+
+          <p class="text-muted small mt-3 mb-0">
+            <code>scripts/add_recurring.py</code> does the same thing from the command
+            line, for seeding a fresh instance.
+          </p>
         </div>
       </div>
 

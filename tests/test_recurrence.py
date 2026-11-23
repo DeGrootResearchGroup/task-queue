@@ -381,7 +381,7 @@ class TestSettingsPage:
         from tests.conftest import login
 
         login(client)
-        assert "None recorded." in client.get("/settings").text
+        assert "None recorded yet." in client.get("/settings").text
 
     def test_a_broken_schedule_does_not_break_the_page(self, client, db_session):
         from tests.conftest import login

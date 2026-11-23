@@ -124,6 +124,13 @@ Obligations that arrive on a cycle are recorded once, and a request is generated
 shortly before each occurrence falls due, so the notice announcing it becomes a
 confirmation rather than the trigger.
 
+Record, edit and deactivate them under **Settings → Standing commitments**.
+Deactivating matters as much as adding: an obligation that lapses stops
+generating work while the requests it already produced keep the rule that
+explains them.
+
+The same thing from the command line, for seeding a fresh instance:
+
 ```bash
 # Monthly, second-last business day, recorded 3 business days earlier
 # because an approval follows.
@@ -139,7 +146,13 @@ uv run scripts/add_recurring.py \
 A schedule is **which months** (`--months 4 8 12`, or omitted for every month)
 plus **which day** — either `--day-of-month` (clamped to short months) or
 `--business-days-before-month-end` (`0` = last business day, `1` = second-last).
-That covers monthly, annual and per-term cycles without a frequency enum.
+That covers monthly, annual and per-term cycles without a frequency enum. Both
+routes in share one validator (`app/schemas.validate_commitment`), so they can't
+drift on what a valid schedule is.
+
+A schedule that can never produce an occurrence is rejected at the point it is
+recorded, by either route — a commitment that silently never fires is the
+failure mode this whole feature exists to prevent.
 
 Generate what is due, from cron:
 
@@ -158,7 +171,13 @@ rather than generated late; one whose *effective* date has passed but whose
 stated date has not is still generated — late, but not missed. Business days are
 Monday to Friday, with no holiday calendar.
 
-Settings lists the recorded commitments and each one's next occurrence.
+Settings shows each commitment's next occurrence alongside it.
+
+**A known limit.** A commitment is anchored to a calendar day, so an obligation
+whose real deadline tracks a moving event — "before the exam period", whose
+dates shift each term — can only be approximated by a fixed day in the right
+month. Set it early enough to be safe and treat the generated request as the
+prompt to check the actual date.
 
 ## Tests
 

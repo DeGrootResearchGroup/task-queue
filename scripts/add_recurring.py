@@ -54,6 +54,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.db import SessionLocal  # noqa: E402
 from app.models import RecurringCommitment, RequestClass, RequestSource  # noqa: E402
 from app.recurrence import next_occurrence  # noqa: E402
+from app.schemas import CommitmentInput, validate_commitment  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,42 +114,76 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _validate(args) -> None:
-    if args.months is not None:
-        if not args.months:
-            raise SystemExit("--months was given with no values; omit it for every month.")
-        if any(not 1 <= m <= 12 for m in args.months):
-            raise SystemExit("--months values must be between 1 and 12.")
-    if args.day_of_month is not None and not 1 <= args.day_of_month <= 31:
-        raise SystemExit("--day-of-month must be between 1 and 31.")
-    if args.business_days_before_month_end is not None and args.business_days_before_month_end < 0:
-        raise SystemExit("--business-days-before-month-end must not be negative.")
-    if args.lead_business_days < 0:
-        raise SystemExit("--lead-business-days must not be negative.")
-    if args.generate_days_ahead < 0:
-        raise SystemExit("--generate-days-ahead must not be negative.")
-    if args.reference_label and not args.reference_url:
-        raise SystemExit("--reference-label needs a --reference-url to label.")
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    _validate(args)
-
-    commitment = RecurringCommitment(
+def _to_input(args) -> CommitmentInput:
+    return CommitmentInput(
         title=args.title.strip(),
         description=args.description.strip(),
-        additional_context=(args.additional_context or "").strip() or None,
-        request_class=RequestClass(args.request_class),
-        source=RequestSource(args.source),
+        request_class=args.request_class,
+        source=args.source,
         months=sorted(set(args.months)) if args.months else None,
         day_of_month=args.day_of_month,
         business_days_before_month_end=args.business_days_before_month_end,
         lead_business_days=args.lead_business_days,
         date_reason=(args.date_reason or "").strip() or None,
+        additional_context=(args.additional_context or "").strip() or None,
         generate_days_ahead=args.generate_days_ahead,
         reference_url=(args.reference_url or "").strip() or None,
         reference_label=(args.reference_label or "").strip() or None,
+    )
+
+
+# Maps a validation error back onto the flag that carries it, so the CLI
+# reports "--day-of-month ..." rather than a form field name. The rules
+# themselves live in app/schemas.validate_commitment, shared with the owner
+# settings form, so the two ways of recording a commitment can't drift.
+_FIELD_FLAGS = {
+    "title": "--title",
+    "description": "--description",
+    "request_class": "--class",
+    "source": "--source",
+    "months": "--months",
+    "day_rule": "--day-of-month / --business-days-before-month-end",
+    "day_of_month": "--day-of-month",
+    "business_days_before_month_end": "--business-days-before-month-end",
+    "lead_business_days": "--lead-business-days",
+    "generate_days_ahead": "--generate-days-ahead",
+    "date_reason": "--date-reason",
+    "additional_context": "--context",
+    "reference_url": "--reference-url",
+    "reference_label": "--reference-label",
+}
+
+
+def _validate(args) -> None:
+    errors = validate_commitment(_to_input(args))
+    if errors:
+        raise SystemExit(
+            "\n".join(
+                f"{_FIELD_FLAGS.get(field, field)}: {message}"
+                for field, message in errors.items()
+            )
+        )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    _validate(args)
+    data = _to_input(args)
+
+    commitment = RecurringCommitment(
+        title=data.title,
+        description=data.description,
+        additional_context=data.additional_context,
+        request_class=RequestClass(data.request_class),
+        source=RequestSource(data.source),
+        months=data.months,
+        day_of_month=data.day_of_month,
+        business_days_before_month_end=data.business_days_before_month_end,
+        lead_business_days=data.lead_business_days,
+        date_reason=data.date_reason,
+        generate_days_ahead=data.generate_days_ahead,
+        reference_url=data.reference_url,
+        reference_label=data.reference_label,
     )
 
     db = SessionLocal()

@@ -219,6 +219,51 @@ def withdraw(db: Session, req: Request) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Cancellation (Owner-initiated, any active status)
+# ---------------------------------------------------------------------------
+
+
+def cancel(db: Session, req: Request, reason: str | None = None) -> None:
+    """Closes a request because the occasion for it went away.
+
+    A fourth terminal state, rather than reusing one of the three that
+    existed, because none of them is true here:
+
+    - `done` asserts the work happened. A month with no PCard transactions
+      to reconcile is not a month in which the reconciliation was
+      performed, and recording it as one makes the archive lie.
+    - `declined` is the Owner refusing a request somebody else made. It
+      carries a required reason addressed to that person, and it is only
+      reachable from `submitted`, so an occurrence already accepted into
+      the queue could not use it in any case.
+    - `withdrawn` is requester-initiated retraction from the public
+      tracking page. A generated occurrence has no requester to retract it.
+
+    Reusing any of them would have made the archive's record untrue, which
+    is the one thing a cancellation has to avoid.
+
+    The reason is optional. "No transactions this month" is a routine
+    non-event, and demanding a sentence about it every cycle is how an
+    honest state stops getting used.
+
+    Reachable from any active status, unlike `decline`, because an
+    occurrence can stop applying at any point before it is finished.
+    """
+    if req.status not in _ACTIVE_STATUSES:
+        raise TransitionError("Only an active request can be cancelled.")
+    if req.status == RequestStatus.queued:
+        _remove_from_queue_and_renumber(db, req)
+    req.status = RequestStatus.cancelled
+    req.cancelled_at = _now()
+    req.cancel_reason = reason.strip() if reason and reason.strip() else None
+    # Cleared for the same reason withdraw() clears them: they only mean
+    # something while a request is on its way back, and this one is not.
+    req.previous_status = None
+    req.previous_queue_position = None
+    _log(db, req, EventType.cancelled, {"reason": req.cancel_reason} if req.cancel_reason else None)
+
+
+# ---------------------------------------------------------------------------
 # Requester-provided additional information — spec §19
 # ---------------------------------------------------------------------------
 

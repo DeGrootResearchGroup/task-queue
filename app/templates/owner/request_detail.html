@@ -197,6 +197,37 @@
 
           {% elif req.status.value == 'withdrawn' %}
             <p class="mb-0">Withdrawn by the requester {{ req.withdrawn_at.strftime('%B %-d, %Y') if req.withdrawn_at else '' }}.</p>
+
+          {% elif req.status.value == 'cancelled' %}
+            <p>
+              Cancelled {{ req.cancelled_at.strftime('%B %-d, %Y') if req.cancelled_at else '' }} —
+              no longer needed, rather than completed or declined.
+            </p>
+            {% if req.cancel_reason %}<p class="mb-0">{{ req.cancel_reason }}</p>{% endif %}
+          {% endif %}
+
+          {#- Cancel is available from every active status, unlike Decline,
+              because the occasion for a request can go away at any point
+              before it is finished. Kept apart from the status-specific
+              actions above so it reads as the escape hatch it is. -#}
+          {% if req.status.value in ('submitted', 'queued', 'in_progress', 'needs_information') %}
+            <div class="border-top mt-3 pt-3">
+              <details>
+                <summary class="btn btn-outline-secondary btn-sm">Cancel — no longer needed</summary>
+                <form method="post" action="/requests/{{ req.id }}/cancel" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <p class="small text-muted">
+                    Closes this without recording it as done. Use it when the occasion went
+                    away — a month with nothing to reconcile, a term with no exams to book.
+                  </p>
+                  <div class="mb-2">
+                    <label for="cancel_reason" class="form-label">Reason (optional)</label>
+                    <input type="text" class="form-control" id="cancel_reason" name="reason">
+                  </div>
+                  <div><button type="submit" class="btn btn-outline-danger btn-sm">Confirm cancel</button></div>
+                </form>
+              </details>
+            </div>
           {% endif %}
         </div>
       </div>

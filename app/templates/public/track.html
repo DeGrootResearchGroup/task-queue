@@ -106,6 +106,18 @@
             <p class="mb-0">You withdrew this request{{ ' on ' + req.withdrawn_at.strftime('%B %-d, %Y') if req.withdrawn_at else '' }}.</p>
           </div>
         </div>
+
+      {% elif req.status.value == 'cancelled' %}
+        <div class="card status-card mb-4">
+          <div class="card-body">
+            <h2 class="h5">Cancelled</h2>
+            <p class="mb-0">
+              This request is no longer needed{{ ', as of ' + req.cancelled_at.strftime('%B %-d, %Y') if req.cancelled_at else '' }}.
+              It was not completed, and it was not declined.
+            </p>
+            {% if req.cancel_reason %}<p class="mb-0 mt-2">{{ req.cancel_reason }}</p>{% endif %}
+          </div>
+        </div>
       {% endif %}
 
       {# ---------------- Original request ---------------- #}
@@ -172,7 +184,7 @@
       </div>
       {% endif %}
 
-      {% if req.status.value not in ('done', 'declined', 'withdrawn') %}
+      {% if req.status.value not in ('done', 'declined', 'withdrawn', 'cancelled') %}
       <div class="card mb-3">
         <div class="card-body">
           <h2 class="h6 text-uppercase text-muted mb-3">Requester actions</h2>

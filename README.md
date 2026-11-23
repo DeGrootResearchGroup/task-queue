@@ -127,7 +127,18 @@ confirmation rather than the trigger.
 Record, edit and deactivate them under **Settings → Standing commitments**.
 Deactivating matters as much as adding: an obligation that lapses stops
 generating work while the requests it already produced keep the rule that
-explains them.
+explains them. Deactivating also cancels whatever occurrence is already open,
+so a stale item can't outlive the rule that made it.
+
+Cancelling works at two levels, because "no longer applies" happens at two:
+
+| | What it means |
+|---|---|
+| Deactivate the commitment | the obligation itself has ended |
+| Cancel one request | this cycle didn't apply — nothing to reconcile, no exams to book |
+
+A cancelled request gets its own terminal status, not `done`. See
+[Cancelling a request](#cancelling-a-request).
 
 The same thing from the command line, for seeding a fresh instance:
 
@@ -178,6 +189,36 @@ whose real deadline tracks a moving event — "before the exam period", whose
 dates shift each term — can only be approximated by a fixed day in the right
 month. Set it early enough to be safe and treat the generated request as the
 prompt to check the actual date.
+
+## Cancelling a request
+
+**Cancel — no longer needed**, on any active request's page, closes it without
+claiming it was done. A `cancelled` status was added rather than reusing one of
+the three terminal states, because none of them is true for "the occasion went
+away":
+
+- `done` asserts the work happened. A month with no PCard transactions to
+  reconcile is not a month the reconciliation was performed, and recording it as
+  one makes the archive lie about what was done.
+- `declined` is refusing a request somebody else made. It carries a reason
+  addressed to that person, and it is only reachable from `submitted`, so an
+  accepted request could not use it anyway.
+- `withdrawn` is the requester retracting their own request from the tracking
+  page.
+
+Cancel is reachable from any active status, unlike Decline, because the occasion
+for a request can disappear at any point before it is finished. The reason is
+optional — "no transactions this month" is a routine non-event, and demanding a
+sentence about it every cycle is how an honest state stops being used.
+
+`cancelled` filters separately from `done` in the Archive, which is the point.
+The requester of a `form` request is emailed and their tracking page says the
+request was not completed and not declined; cancelling one of your own
+obligations mails nobody.
+
+Cancelling an occurrence does not touch its standing commitment: the series
+stays active, the generator does not re-create the cancelled occurrence, and the
+next cycle is produced as normal.
 
 ## Tests
 

@@ -18,6 +18,7 @@
   {%- elif status == 'done' -%}Completed
   {%- elif status == 'declined' -%}Declined
   {%- elif status == 'withdrawn' -%}Withdrawn
+  {%- elif status == 'cancelled' -%}Cancelled
   {%- else -%}{{ status }}
   {%- endif -%}
 {% endmacro %}
@@ -31,6 +32,7 @@
     'done': 'text-bg-success',
     'declined': 'text-bg-secondary',
     'withdrawn': 'text-bg-secondary',
+    'cancelled': 'text-bg-secondary',
   } %}
   <span class="badge rounded-pill {{ bs_class.get(status, 'text-bg-secondary') }} status-{{ status }}">{{ status_label(status) }}</span>
 {% endmacro %}

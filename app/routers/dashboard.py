@@ -11,12 +11,14 @@ from app.flash import flash
 from app.models import AppSettings, Request as RequestModel, RequestClass, RequestSource, RequestStatus
 from app.notifications import (
     notify_requester_accepted,
+    notify_requester_cancelled,
     notify_requester_completed,
     notify_requester_declined,
     notify_requester_needs_information,
 )
 from app.state_machine import (
     accept_and_queue,
+    cancel,
     complete,
     decline,
     move_down,
@@ -270,6 +272,28 @@ def complete_request(
     commit_and_refresh(db, req, settings_row)
     background_tasks.add_task(notify_requester_completed, str(request.base_url), req, settings_row)
     flash(request, f"{req.title} marked done.", "success")
+    return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
+
+
+@router.post("/requests/{request_id}/cancel", dependencies=[Depends(verify_csrf)])
+def cancel_request(
+    request_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    reason: str = Form(""),
+    db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
+):
+    """Closes a request that no longer applies, without claiming it was done.
+
+    The notification no-ops when there is no requester, so cancelling one
+    of the Owner's own generated occurrences mails nobody.
+    """
+    req = _get_request_or_404(db, request_id)
+    cancel(db, req, reason)
+    commit_and_refresh(db, req, settings_row)
+    background_tasks.add_task(notify_requester_cancelled, str(request.base_url), req, settings_row)
+    flash(request, f"{req.title} cancelled.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
 
 

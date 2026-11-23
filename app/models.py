@@ -45,6 +45,11 @@ class RequestStatus(str, enum.Enum):
     done = "done"
     declined = "declined"
     withdrawn = "withdrawn"
+    # Closed without being done and without being refused: the occasion for
+    # it went away. A month with no PCard transactions to reconcile, a term
+    # with no exams to book scanning for. See state_machine.cancel for why
+    # none of the three above could carry this.
+    cancelled = "cancelled"
 
 
 class EventType(str, enum.Enum):
@@ -57,6 +62,7 @@ class EventType(str, enum.Enum):
     completed = "completed"
     declined = "declined"
     withdrawn = "withdrawn"
+    cancelled = "cancelled"
     moved_to_long = "moved_to_long"
     information_added = "information_added"
     reordered = "reordered"
@@ -114,6 +120,7 @@ class Request(Base):
     previous_queue_position: Mapped[int | None] = mapped_column(Integer, default=None)
 
     decline_reason: Mapped[str | None] = mapped_column(Text, default=None)
+    cancel_reason: Mapped[str | None] = mapped_column(Text, default=None)
     completion_note: Mapped[str | None] = mapped_column(Text, default=None)
 
     new_information_flag: Mapped[bool] = mapped_column(default=False)
@@ -126,6 +133,7 @@ class Request(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     declined_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
 
     links: Mapped[list["RequestLink"]] = relationship(
         back_populates="request", cascade="all, delete-orphan", order_by="RequestLink.id"

@@ -8,13 +8,30 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
-from app.models import AppSettings, RecurringCommitment, RequestClass, RequestSource
+from app.models import (
+    AppSettings,
+    RecurringCommitment,
+    Request as RequestModel,
+    RequestClass,
+    RequestSource,
+    RequestStatus,
+)
 from app.recurrence import next_occurrence
 from app.schemas import DAY_RULES, CommitmentInput, parse_commitment_form, validate_commitment
 from app.security import generate_calendar_token
+from app.state_machine import cancel
 from app.templating import render
 
 router = APIRouter(dependencies=[Depends(require_owner)])
+
+# The statuses in which a generated occurrence is still live work, and so
+# still gets cancelled when its series is switched off.
+OPEN_STATUSES = (
+    RequestStatus.submitted,
+    RequestStatus.queued,
+    RequestStatus.in_progress,
+    RequestStatus.needs_information,
+)
 
 
 def _commitment_rows(db: Session) -> list[dict]:
@@ -297,15 +314,40 @@ def set_commitment_active(
     Deactivating rather than deleting is the point: an obligation that
     lapses — a course no longer taught — stops generating work, but the
     requests it already produced keep the rule that explains them.
+
+    Deactivating also cancels whatever occurrence is already open, rather
+    than prompting about it. Prompting would mean a confirmation screen
+    for a question with one sensible answer: the series was switched off
+    because it no longer applies, so the occurrence sitting on the queue
+    no longer applies either, and leaving it there is how a stale item
+    outlives the rule that made it. Cancelling is reversible in the sense
+    that matters — nothing is deleted, the request stays in the archive
+    marked cancelled with its reason, and the flash says it happened.
+
+    Reactivating does not bring that occurrence back; it is terminal. The
+    next generator run produces the next one on schedule.
     """
     commitment = _get_commitment_or_404(db, commitment_id)
     commitment.active = active == "on"
+
+    cancelled_titles: list[str] = []
+    if not commitment.active:
+        open_occurrences = db.scalars(
+            select(RequestModel).where(
+                RequestModel.recurrence_id == commitment.id,
+                RequestModel.status.in_(OPEN_STATUSES),
+            )
+        ).all()
+        for occurrence in open_occurrences:
+            cancel(db, occurrence, "Standing commitment deactivated.")
+            cancelled_titles.append(occurrence.title)
+
     db.commit()
-    flash(
-        request,
-        f"{commitment.title} {'reactivated' if commitment.active else 'deactivated'}.",
-        "success",
-    )
+
+    message = f"{commitment.title} {'reactivated' if commitment.active else 'deactivated'}."
+    if cancelled_titles:
+        message += " Cancelled its open occurrence: " + ", ".join(cancelled_titles) + "."
+    flash(request, message, "success")
     return RedirectResponse(url="/settings", status_code=303)
 
 

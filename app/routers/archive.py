@@ -10,7 +10,15 @@ from app.templating import render
 
 router = APIRouter(dependencies=[Depends(require_owner)])
 
-ARCHIVE_STATUSES = (RequestStatus.done, RequestStatus.declined, RequestStatus.withdrawn)
+ARCHIVE_STATUSES = (
+    RequestStatus.done,
+    RequestStatus.declined,
+    RequestStatus.withdrawn,
+    # Listed separately from `done` on purpose: a cancelled request is one
+    # whose occasion went away, and collapsing the two would make the
+    # archive claim work that never happened.
+    RequestStatus.cancelled,
+)
 
 
 @router.get("/archive")

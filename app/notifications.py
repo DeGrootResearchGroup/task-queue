@@ -108,6 +108,21 @@ def notify_requester_needs_information(
 
 
 @_requires_requester
+def notify_requester_cancelled(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
+    reason_line = f"\n\nReason: {req.cancel_reason}" if req.cancel_reason else ""
+    body = (
+        f"Hi {req.requester_name},\n\n"
+        f'Your request "{req.title}" has been cancelled — it is no longer needed, '
+        f"rather than having been completed or declined.{reason_line}\n\n"
+        f"Details:\n{_tracking_url(base_url, req)}\n\n"
+        f"— {settings_row.owner_display_name}"
+    )
+    send_email(
+        req.requester_email, f"[{req.public_number}] Request cancelled: {req.title}", body, _from_name(settings_row)
+    )
+
+
+@_requires_requester
 def notify_requester_completed(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
     note_line = f"\n\n{req.completion_note}" if req.completion_note else ""
     body = (

@@ -110,11 +110,27 @@ given.
 `POST /intake/requests` is the machine-facing version of the script above, for
 a mail sweep that runs without anyone on the box.
 
-It exists only when `INTAKE_TOKEN` is set. Leave it blank — the default — and
-the route is never registered: the path does not exist and nothing appears in
-the OpenAPI schema. Generate one with
-`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`, and see
-[`DEPLOY.md`](DEPLOY.md) for rotating it.
+It exists only when `INTAKE_TOKEN_HASH` is set. Leave it blank — the default —
+and the route is never registered: the path does not exist and nothing appears
+in the OpenAPI schema.
+
+```bash
+uv run scripts/generate_intake_token.py
+```
+
+That prints a raw token for the caller and an `INTAKE_TOKEN_HASH=` line for the
+server's `.env`. **Only the SHA-256 digest is stored**, so a leaked `.env`, a
+copied database or a restored backup yields nothing that can be presented here.
+The raw token is shown once and cannot be recovered; rotating is just running
+the script again (see [`DEPLOY.md`](DEPLOY.md)).
+
+This is the opposite choice from `calendar_token` and a request's access token,
+which are stored in the clear — deliberately, because those have to be
+*recoverable*: one is displayed so it can be pasted into a calendar client, the
+other goes into a requester's tracking URL. An intake token is only ever
+verified, so it never needs reading back. SHA-256 rather than bcrypt because a
+256-bit random token has nothing to brute-force, so a slow KDF would only cost
+CPU per request — and bcrypt silently truncates at 72 bytes.
 
 ```bash
 curl -X POST https://tasks.example.com/intake/requests \

@@ -61,7 +61,7 @@ def include_routers(app: FastAPI, app_settings: Settings) -> None:
     """Mounts every router, and the intake router only if it's configured.
 
     The intake endpoint is gated here rather than returning 404 from inside
-    itself, so an instance with no INTAKE_TOKEN genuinely has no such path —
+    itself, so an instance with no INTAKE_TOKEN_HASH genuinely has no such path —
     nothing in the routing table and nothing in the OpenAPI schema. A
     deployment that never meant to accept machine submissions exposes no
     surface to probe at all.

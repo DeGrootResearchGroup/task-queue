@@ -23,14 +23,16 @@ email pipeline.
 own savepoint and reported on individually, so a malformed row is rejected
 while its neighbours are stored.
 
-The route is registered only when `INTAKE_TOKEN` is set (see
+The route is registered only when `INTAKE_TOKEN_HASH` is set (see
 `app/main.py`), so an unconfigured instance has no such path at all. A
 wrong or missing token gets the same 404 as a path that does not exist,
 for the reason the calendar feed does it: a probe learns nothing about
 whether there is anything here to find.
+
+Only the token's SHA-256 digest lives on the server, so a leaked .env or
+a copied database yields nothing that can be presented here.
 """
 
-import hmac
 import json
 from datetime import date
 
@@ -46,6 +48,7 @@ from app.db import get_db
 from app.intake import IntakeError, Link, create_request
 from app.models import Request as RequestModel, RequestClass, RequestSource
 from app.rate_limit import limiter
+from app.security import intake_token_matches
 from app.schemas import (
     MAX_CONTEXT_LEN,
     MAX_DEDUPE_KEY_LEN,
@@ -108,11 +111,12 @@ def _not_found() -> JSONResponse:
 def _token_ok(request: Request) -> bool:
     header = request.headers.get("authorization", "")
     scheme, _, presented = header.partition(" ")
-    if scheme.lower() != "bearer" or not presented:
+    if scheme.lower() != "bearer":
         return False
-    # compare_digest on both the configured and presented token keeps the
-    # check constant-time; the guard above means `presented` is non-empty.
-    return hmac.compare_digest(presented, _settings.intake_token)
+    # The server holds only a digest, never the token itself: the presented
+    # value is hashed and the digests compared in constant time. See
+    # app.security.hash_intake_token.
+    return intake_token_matches(presented.strip(), _settings.intake_token_hash)
 
 
 async def _read_capped_body(request: Request) -> bytes | None:

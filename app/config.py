@@ -29,10 +29,14 @@ class Settings(BaseSettings):
     # Brute-force protection on Owner login, keyed by IP
     login_rate_limit: str = "10/minute"
 
-    # Token for the machine-facing intake endpoint (POST /intake/requests),
-    # used by the mail sweep. Left blank, the route is never registered at
-    # all, so an unconfigured instance exposes nothing to find.
-    intake_token: str = ""
+    # SHA-256 digest of the bearer token for the machine-facing intake
+    # endpoint (POST /intake/requests), used by the mail sweep. The raw
+    # token is never stored here or anywhere else on the server — see
+    # app.security.hash_intake_token for why this one is hashed when
+    # calendar_token and access_token are not. Generate both halves with
+    # scripts/generate_intake_token.py. Left blank, the route is never
+    # registered at all, so an unconfigured instance exposes nothing.
+    intake_token_hash: str = ""
     intake_rate_limit: str = "10/minute"
 
     # Owner-facing settings defaults (overridable via /settings, stored in AppSettings row)
@@ -60,7 +64,7 @@ class Settings(BaseSettings):
 
     @property
     def intake_enabled(self) -> bool:
-        return bool(self.intake_token)
+        return bool(self.intake_token_hash.strip())
 
     @property
     def email_enabled(self) -> bool:

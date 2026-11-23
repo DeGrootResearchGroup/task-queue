@@ -4,7 +4,8 @@ Three properties carry the weight, because this runs unattended: a leaked
 token must not be able to create anything the Owner has not reviewed, a
 re-run must not duplicate, and one bad item must not sink the batch.
 
-conftest sets INTAKE_TOKEN, so the route is registered for this module.
+conftest sets INTAKE_TOKEN_HASH to the digest of TOKEN below, so the route
+is registered for this module.
 """
 
 import json
@@ -66,6 +67,110 @@ class TestTokenGate:
         assert missing_route.status_code == wrong_token.status_code == 404
 
 
+class TestTokenIsStoredHashed:
+    """The server holds only a digest.
+
+    Unlike `calendar_token` and `Request.access_token`, which are kept in
+    the clear because they have to be recoverable, an intake token is only
+    ever verified — so a leaked .env or a copied database must yield
+    nothing that can be presented at this endpoint.
+    """
+
+    def test_the_raw_token_is_nowhere_in_the_configuration(self):
+        from app.config import get_settings
+
+        settings = get_settings()
+        assert not hasattr(settings, "intake_token")
+        assert TOKEN not in settings.model_dump_json()
+
+    def test_presenting_the_stored_digest_does_not_authenticate(self, client, db_session):
+        # The thing an attacker would find on the server must not be the
+        # thing that works against it.
+        from app.config import get_settings
+
+        resp = client.post(
+            URL, json={"items": [item()]}, headers=auth(get_settings().intake_token_hash)
+        )
+        assert resp.status_code == 404
+        assert db_session.scalars(select(RequestModel)).all() == []
+
+    def test_the_digest_is_sha256_of_the_token(self):
+        import hashlib
+
+        from app.security import hash_intake_token
+
+        assert hash_intake_token(TOKEN) == hashlib.sha256(TOKEN.encode()).hexdigest()
+
+    def test_it_is_not_bcrypt(self):
+        # bcrypt truncates silently at 72 bytes, and a slow KDF buys nothing
+        # against a 256-bit random token. A hex digest also avoids the `$`
+        # that docker compose's env_file loader eats.
+        from app.security import hash_intake_token
+
+        digest = hash_intake_token("x" * 200)
+        assert "$" not in digest
+        assert len(digest) == 64
+        assert hash_intake_token("x" * 200) != hash_intake_token("x" * 201)
+
+    def test_matching_rejects_empty_values(self):
+        from app.security import hash_intake_token, intake_token_matches
+
+        assert not intake_token_matches("", hash_intake_token(TOKEN))
+        assert not intake_token_matches(TOKEN, "")
+
+    def test_a_hand_pasted_hash_is_tolerant_of_case_and_whitespace(self):
+        from app.security import hash_intake_token, intake_token_matches
+
+        stored = hash_intake_token(TOKEN)
+        assert intake_token_matches(TOKEN, f"  {stored.upper()}  ")
+
+    def test_a_generated_token_round_trips(self):
+        from app.security import generate_intake_token, hash_intake_token, intake_token_matches
+
+        token = generate_intake_token()
+        assert intake_token_matches(token, hash_intake_token(token))
+        assert not intake_token_matches(token + "x", hash_intake_token(token))
+
+
+class TestGeneratorScript:
+    def test_it_prints_a_token_and_the_matching_hash(self, capsys):
+        import scripts.generate_intake_token as script
+        from app.security import intake_token_matches
+
+        assert script.main() == 0
+        out = capsys.readouterr().out
+
+        hash_line = next(ln for ln in out.splitlines() if ln.startswith("INTAKE_TOKEN_HASH="))
+        digest = hash_line.split("=", 1)[1]
+        # The raw token is the only indented line in the output.
+        token = next(
+            ln.strip() for ln in out.splitlines() if ln.startswith("    ") and ln.strip()
+        )
+        assert intake_token_matches(token, digest)
+
+    def test_it_says_the_token_cannot_be_recovered(self, capsys):
+        import scripts.generate_intake_token as script
+
+        script.main()
+        assert "ONCE" in capsys.readouterr().out
+
+    def test_it_says_no_escaping_is_needed(self, capsys):
+        # So the `$`-doubling advice in hash_password.py isn't applied here,
+        # where it would corrupt the value.
+        import scripts.generate_intake_token as script
+
+        script.main()
+        assert "No escaping needed" in capsys.readouterr().out
+
+    def test_each_run_produces_a_different_token(self, capsys):
+        import scripts.generate_intake_token as script
+
+        script.main()
+        first = capsys.readouterr().out
+        script.main()
+        assert capsys.readouterr().out != first
+
+
 # Building an OpenAPI schema is the only reliable way to see whether a
 # route was mounted (FastAPI wraps included routers in an opaque object),
 # and doing so surfaces pre-existing duplicate-operation-id warnings from
@@ -73,21 +178,26 @@ class TestTokenGate:
 # what these tests check.
 @pytest.mark.filterwarnings("ignore:Duplicate Operation ID:UserWarning")
 class TestRouteGating:
-    def _probe(self, token: str):
+    def _probe(self, token_hash: str):
         from fastapi import FastAPI
 
         from app.config import Settings
         from app.main import include_routers
 
         probe = FastAPI()
-        include_routers(probe, Settings(intake_token=token))
+        include_routers(probe, Settings(intake_token_hash=token_hash))
         return probe.openapi()["paths"]
 
     def test_the_route_does_not_exist_without_a_token(self):
         assert URL not in self._probe("")
 
+    def test_whitespace_alone_does_not_enable_it(self):
+        assert URL not in self._probe("   ")
+
     def test_the_route_exists_with_a_token(self):
-        assert URL in self._probe("some-token")
+        from app.security import hash_intake_token
+
+        assert URL in self._probe(hash_intake_token("some-token"))
 
 
 class TestWhatItMayCreate:

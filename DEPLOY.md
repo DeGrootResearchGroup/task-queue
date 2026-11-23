@@ -69,38 +69,52 @@ Edit `.env`:
   hash will silently corrupt (Owner login just stops working, no error) if
   pasted in as-is — see the comment in `.env.production.example`.
 
-- `INTAKE_TOKEN` — **optional.** Only needed if something will post captured
-  items to `POST /intake/requests` (see the README). Leave it blank and the
-  route is never registered, so the path does not exist at all. To enable it:
+- `INTAKE_TOKEN_HASH` — **optional.** Only needed if something will post
+  captured items to `POST /intake/requests` (see the README). Leave it blank
+  and the route is never registered, so the path does not exist at all. To
+  enable it, generate both halves **on this Mac**:
 
   ```bash
-  python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+  uv run scripts/generate_intake_token.py
   ```
 
-  Paste the value into `.env` on the box and give the same value to whatever
-  calls the endpoint. It is a bearer token: anyone holding it can put items
-  into "Awaiting review", so treat it like a password — never commit it, and
-  never put it in a URL, where it would end up in logs.
+  It prints a raw token and an `INTAKE_TOKEN_HASH=` line. Paste the hash line
+  into `.env` on the box; give the raw token to whatever calls the endpoint and
+  keep it somewhere that keeps secrets (macOS Keychain, a password manager),
+  not a dotfile.
+
+  The raw token is shown once and cannot be recovered — the server stores only
+  its SHA-256 digest, so a leaked `.env`, a copied `task_queue.db` or a
+  restored backup yields nothing that can be presented at the endpoint. Lose it
+  and you generate a new one; there is nothing to look up.
+
+  Unlike `OWNER_PASSWORD_HASH`, the hash line needs **no `$`-escaping** — a hex
+  digest contains none.
+
+  It is still a bearer token: anyone holding the raw value can put items into
+  "Awaiting review", so never commit it and never put it in a URL, where it
+  would land in logs.
 
 `DATABASE_URL` and `ENVIRONMENT` are already set correctly for this setup in
 `.env.production.example` — leave them as-is.
 
 ### Rotating the intake token
 
-Replacing the value is the only way to revoke it, and the app reads `.env` only
-at startup. Generate a new one:
+Generating a new one is the only way to revoke the old, and the app reads
+`.env` only at startup. Run the same script again:
 
 ```bash
-python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+uv run scripts/generate_intake_token.py
 ```
 
-Put it in `INTAKE_TOKEN` in `.env` on the box, then restart so it is picked up:
+Put the new `INTAKE_TOKEN_HASH` line in `.env` on the box, then restart so it
+is picked up:
 
 ```bash
 cd /opt/task-queue && docker compose up -d
 ```
 
-Then update whatever calls the endpoint. Until you do, its posts get a flat
+Then give the new raw token to the caller. Until you do, its posts get a flat
 `404` — the same response a wrong token has always given, so a stale caller
 fails looking like "no such endpoint" rather than "wrong credential". Nothing
 already captured is affected: rotating only changes who may add more.

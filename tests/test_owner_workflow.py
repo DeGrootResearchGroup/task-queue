@@ -93,6 +93,21 @@ def test_decline_requires_reason_and_shows_on_tracking_page(client):
     assert "Out of scope for me" in tracking.text
 
 
+def _queue_order(client) -> list[str]:
+    """Titles in the dashboard's accepted queue, in the order rendered.
+
+    Read from inside the queue list rather than by searching the whole
+    page: a flash message names the request it acted on, so a plain
+    `text.index(title)` can find the title in the flash at the top of the
+    page instead of in the row being positioned.
+    """
+    html = client.get("/dashboard").text
+    queue_html = html[html.index('id="queue-list"') :]
+    # .strip() because a row title is followed by the source badge, so the
+    # captured text carries the whitespace between them.
+    return [t.strip() for t in re.findall(r'class="row-title[^"]*">([^<]*)<', queue_html)]
+
+
 def test_queue_reorder_via_move_up_down(client):
     login(client)
     submit_request(client, title="First in queue")
@@ -104,16 +119,14 @@ def test_queue_reorder_via_move_up_down(client):
         csrf = _csrf_from(detail.text)
         client.post(f"/requests/{req_id}/accept", data={"csrf_token": csrf}, follow_redirects=False)
 
-    dash = client.get("/dashboard")
-    assert dash.text.index("First in queue") < dash.text.index("Second in queue")
+    assert _queue_order(client) == ["First in queue", "Second in queue"]
 
     second_id = _request_id_from_dashboard(client, "Second in queue")
     detail = client.get(f"/requests/{second_id}")
     csrf = _csrf_from(detail.text)
     client.post(f"/requests/{second_id}/move-up", data={"csrf_token": csrf}, follow_redirects=False)
 
-    dash = client.get("/dashboard")
-    assert dash.text.index("Second in queue") < dash.text.index("First in queue")
+    assert _queue_order(client) == ["Second in queue", "First in queue"]
 
 
 def test_quick_action_session_processes_and_advances(client):
@@ -131,7 +144,10 @@ def test_quick_action_session_processes_and_advances(client):
 
     session = client.get("/quick-session")
     assert "Sign form B" in session.text
-    assert "Sign form A" not in session.text
+    # A is checked by its action URL, not by its title: completing it
+    # flashes "Marked done: Sign form A", which legitimately names it. What
+    # must be gone is A as the action on offer.
+    assert f"/quick-session/{req_id}/done" not in session.text
 
 
 def test_move_quick_action_to_long_actions(client):

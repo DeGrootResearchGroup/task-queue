@@ -128,15 +128,14 @@ def next_occurrence(commitment, today: date) -> tuple[date, date]:
     whose *effective* date has passed but whose stated date has not is
     still live, and is returned — late, but not yet missed.
     """
-    anchor = commitment.last_generated_stated_date
-    if anchor is None or anchor < today - timedelta(days=1):
-        # Start the search from yesterday so an occurrence stated *today*
-        # is still found; `next_stated_date` is strictly-after.
-        anchor = today - timedelta(days=1)
-
+    # The search starts from the later of "the last occurrence generated"
+    # and "yesterday". The first half is what stops a second run producing
+    # a duplicate; the second is what skips a missed occurrence, since any
+    # stated date before today is simply never reached. Yesterday rather
+    # than today because `next_stated_date` is strictly-after, and an
+    # occurrence stated *today* is still live.
+    anchor = max(commitment.last_generated_stated_date or date.min, today - timedelta(days=1))
     stated = next_stated_date(commitment, after=anchor)
-    while stated < today:
-        stated = next_stated_date(commitment, after=stated)
     return stated, effective_date(commitment, stated)
 
 

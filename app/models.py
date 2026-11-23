@@ -1,7 +1,18 @@
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -93,6 +104,12 @@ class Request(Base):
     desired_completion_date: Mapped[date | None] = mapped_column(Date, default=None)
     desired_date_reason: Mapped[str | None] = mapped_column(Text, default=None)
 
+    # Set when this request was generated from a standing commitment, so a
+    # generated instance can be traced back to the rule that produced it.
+    recurrence_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recurring_commitments.id"), default=None, index=True
+    )
+
     queue_position: Mapped[int | None] = mapped_column(Integer, default=None)
     previous_queue_position: Mapped[int | None] = mapped_column(Integer, default=None)
 
@@ -123,6 +140,63 @@ class Request(Base):
     )
     events: Mapped[list["RequestEvent"]] = relationship(
         back_populates="request", cascade="all, delete-orphan", order_by="RequestEvent.created_at"
+    )
+    recurrence: Mapped["RecurringCommitment | None"] = relationship(back_populates="generated")
+
+
+class RecurringCommitment(Base):
+    """An obligation that arrives on a cycle, recorded once.
+
+    See app/recurrence.py for how the schedule fields combine and why the
+    model is "which months + which day" rather than a frequency enum.
+    Generating a Request from one of these is the only way the queue holds
+    work that nobody has asked for yet.
+    """
+
+    __tablename__ = "recurring_commitments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(Text)
+    additional_context: Mapped[str | None] = mapped_column(Text, default=None)
+    request_class: Mapped[RequestClass] = mapped_column(Enum(RequestClass))
+    source: Mapped[RequestSource] = mapped_column(Enum(RequestSource), default=RequestSource.manual)
+
+    # Which months it falls in: a list of month numbers, or null/empty for
+    # every month. Monthly PCard is null; annual Flex Credits is [11]; a
+    # per-term obligation is simply a three-element list.
+    months: Mapped[list[int] | None] = mapped_column(JSON, default=None)
+
+    # Exactly one of these two sets the day within the month.
+    day_of_month: Mapped[int | None] = mapped_column(Integer, default=None)
+    business_days_before_month_end: Mapped[int | None] = mapped_column(Integer, default=None)
+
+    # The effective date rule: business days to back the recorded date off
+    # the stated one, where a second party must act afterwards.
+    lead_business_days: Mapped[int] = mapped_column(Integer, default=0)
+    date_reason: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # How far before the effective date the request appears on the queue.
+    generate_days_ahead: Mapped[int] = mapped_column(Integer, default=14)
+
+    reference_url: Mapped[str | None] = mapped_column(String(2000), default=None)
+    reference_label: Mapped[str | None] = mapped_column(String(200), default=None)
+
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # The stated date of the most recently generated occurrence. Advancing
+    # this is what stops a second run of the generator producing a
+    # duplicate for the same occurrence.
+    last_generated_stated_date: Mapped[date | None] = mapped_column(Date, default=None)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    generated: Mapped[list["Request"]] = relationship(
+        back_populates="recurrence", order_by="Request.desired_completion_date"
     )
 
 

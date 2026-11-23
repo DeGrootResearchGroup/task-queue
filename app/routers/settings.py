@@ -1,23 +1,54 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
-from app.models import AppSettings
+from app.models import AppSettings, RecurringCommitment
+from app.recurrence import next_occurrence
 from app.security import generate_calendar_token
 from app.templating import render
 
 router = APIRouter(dependencies=[Depends(require_owner)])
 
 
+def _commitment_rows(db: Session) -> list[dict]:
+    """Standing commitments plus their next occurrence, for display only.
+
+    Read-only on purpose: these are recorded once, with
+    `scripts/add_recurring.py`, and editing them is rare enough that a form
+    would be more surface than it earns. Showing them here is about not
+    having a scheduler nobody can see.
+    """
+    today = date.today()
+    rows = []
+    for commitment in db.scalars(
+        select(RecurringCommitment).order_by(
+            RecurringCommitment.active.desc(), RecurringCommitment.title
+        )
+    ):
+        try:
+            stated, effective = next_occurrence(commitment, today)
+        except ValueError:
+            # A schedule that can't resolve is a configuration error, not a
+            # reason to fail the whole settings page.
+            stated = effective = None
+        rows.append({"commitment": commitment, "stated": stated, "effective": effective})
+    return rows
+
+
 @router.get("/settings")
 def settings_form(
     request: Request,
+    db: Session = Depends(get_db),
     settings_row: AppSettings = Depends(get_app_settings),
 ):
     email_settings = get_settings()
+    commitments = _commitment_rows(db)
     calendar_url = (
         f"{request.base_url}calendar/{settings_row.calendar_token}.ics"
         if settings_row.calendar_token
@@ -34,6 +65,7 @@ def settings_form(
             "smtp_username": email_settings.smtp_username,
             "owner_notification_email": email_settings.owner_notification_email,
             "calendar_url": calendar_url,
+            "commitments": commitments,
         },
     )
 

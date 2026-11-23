@@ -7,6 +7,10 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["MIN_FORM_FILL_SECONDS"] = "0"
 os.environ["SUBMIT_RATE_LIMIT"] = "1000/minute"
 os.environ["LOGIN_RATE_LIMIT"] = "1000/minute"
+# Set so the intake router is registered for the tests that exercise it;
+# tests/test_intake_api.py also checks it is absent when this is blank.
+os.environ["INTAKE_TOKEN"] = "test-intake-token"
+os.environ["INTAKE_RATE_LIMIT"] = "1000/minute"
 
 import pytest
 from sqlalchemy import create_engine

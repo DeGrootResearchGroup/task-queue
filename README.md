@@ -83,6 +83,9 @@ uv run scripts/add_request.py \
     --link "message://%3C1234@uwo.ca%3E" --link-label "Originating email"
 ```
 
+Or over HTTP, for an unattended sweep — see
+[the intake endpoint](#the-intake-endpoint).
+
 Three things differ from a public submission:
 
 - **Nothing is notified.** The owner-facing "new request" email is scheduled by
@@ -101,6 +104,80 @@ Three things differ from a public submission:
 that is the stated deadline backed off; `--date-reason` is where the stated
 deadline and the adjustment are recorded, and it is required whenever a date is
 given.
+
+### The intake endpoint
+
+`POST /intake/requests` is the machine-facing version of the script above, for
+a mail sweep that runs without anyone on the box.
+
+It exists only when `INTAKE_TOKEN` is set. Leave it blank — the default — and
+the route is never registered: the path does not exist and nothing appears in
+the OpenAPI schema. Generate one with
+`python3 -c "import secrets; print(secrets.token_urlsafe(32))"`, and see
+[`DEPLOY.md`](DEPLOY.md) for rotating it.
+
+```bash
+curl -X POST https://tasks.example.com/intake/requests \
+  -H "Authorization: Bearer $INTAKE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"items": [
+        {"title": "Approve Kuali program form",
+         "description": "Approve in Kuali; a student is held up until this clears.",
+         "request_class": "quick",
+         "source": "email",
+         "desired_completion_date": "2026-11-26",
+         "desired_date_reason": "Stated Nov 30; 2 business days earlier, the Faculty office acts after.",
+         "links": [{"url": "message://%3Ckuali-99@uwo.ca%3E", "label": "Originating email"}],
+         "dedupe_key": "<kuali-99@uwo.ca>"}
+      ]}'
+```
+
+A bare JSON list works in place of `{"items": [...]}`. Every field above except
+`title`, `description` and `request_class` is optional; `source` defaults to
+`email` and may only be `email` or `manual`.
+
+**What a leaked token buys.** Items always land at `submitted`, and `source`
+can never be `form`. There is no field for a status, a queue position or a
+requester, and unknown fields are refused rather than ignored — so the worst
+case is junk in "Awaiting review", which is reviewed before anything happens to
+it. The token goes in the `Authorization` header, compared in constant time; a
+wrong or missing one gets the same bare `404` as a path that does not exist, so
+a probe learns nothing. The endpoint is rate-limited (`INTAKE_RATE_LIMIT`),
+capped at 50 items and 256 KB per request, and notifies nobody.
+
+**Idempotency.** Give each item a `dedupe_key` and a repeat is a no-op. The RFC
+message-id of the originating mail is the natural value. This is what makes a
+sweep safe to re-run, and safe to run twice over the same mailbox:
+
+```json
+{"index": 0, "status": "duplicate", "request_id": 7, "public_number": "REQ-0007",
+ "dedupe_key": "<kuali-99@uwo.ca>"}
+```
+
+Two consequences worth knowing:
+
+- A key you have already sent stays used **whatever became of the request**. If
+  you declined or cancelled it, a later sweep reports `duplicate` and does not
+  put it back. That is the intent — a decision you have made should stick — but
+  it does mean a request deliberately removed cannot be re-captured under the
+  same key.
+- One email that genuinely warrants two tasks needs two distinct keys. Qualify
+  them, e.g. `<id@host>#register` and `<id@host>#attend`.
+
+Items with no `dedupe_key` are never deduplicated. Nothing infers a key from
+content — two identical items without keys are both stored.
+
+**The response** is `200` with a per-item result, so one bad row does not sink
+the batch:
+
+```json
+{"results": [{"index": 0, "status": "created", "request_id": 1, "public_number": "REQ-0001", "dedupe_key": "<a@uwo.ca>"},
+             {"index": 1, "status": "rejected", "error": "title: String should have at least 1 character"}],
+ "created": 1, "duplicate": 0, "rejected": 1}
+```
+
+`status` is `created`, `duplicate` or `rejected`. Whole-batch failures — bad
+JSON, too many items, an oversized body, a bad token — are non-200 instead.
 
 ### Calendar feed
 

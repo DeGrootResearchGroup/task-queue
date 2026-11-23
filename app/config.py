@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     # Brute-force protection on Owner login, keyed by IP
     login_rate_limit: str = "10/minute"
 
+    # Token for the machine-facing intake endpoint (POST /intake/requests),
+    # used by the mail sweep. Left blank, the route is never registered at
+    # all, so an unconfigured instance exposes nothing to find.
+    intake_token: str = ""
+    intake_rate_limit: str = "10/minute"
+
     # Owner-facing settings defaults (overridable via /settings, stored in AppSettings row)
     owner_display_name: str = "The Owner"
     meeting_booking_url: str = ""
@@ -51,6 +57,10 @@ class Settings(BaseSettings):
     @property
     def cookie_secure(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def intake_enabled(self) -> bool:
+        return bool(self.intake_token)
 
     @property
     def email_enabled(self) -> bool:

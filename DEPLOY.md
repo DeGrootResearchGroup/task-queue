@@ -69,8 +69,41 @@ Edit `.env`:
   hash will silently corrupt (Owner login just stops working, no error) if
   pasted in as-is — see the comment in `.env.production.example`.
 
+- `INTAKE_TOKEN` — **optional.** Only needed if something will post captured
+  items to `POST /intake/requests` (see the README). Leave it blank and the
+  route is never registered, so the path does not exist at all. To enable it:
+
+  ```bash
+  python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+  ```
+
+  Paste the value into `.env` on the box and give the same value to whatever
+  calls the endpoint. It is a bearer token: anyone holding it can put items
+  into "Awaiting review", so treat it like a password — never commit it, and
+  never put it in a URL, where it would end up in logs.
+
 `DATABASE_URL` and `ENVIRONMENT` are already set correctly for this setup in
 `.env.production.example` — leave them as-is.
+
+### Rotating the intake token
+
+Replacing the value is the only way to revoke it, and the app reads `.env` only
+at startup. Generate a new one:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Put it in `INTAKE_TOKEN` in `.env` on the box, then restart so it is picked up:
+
+```bash
+cd /opt/task-queue && docker compose up -d
+```
+
+Then update whatever calls the endpoint. Until you do, its posts get a flat
+`404` — the same response a wrong token has always given, so a stale caller
+fails looking like "no such endpoint" rather than "wrong credential". Nothing
+already captured is affected: rotating only changes who may add more.
 
 ## 5. Build and start
 

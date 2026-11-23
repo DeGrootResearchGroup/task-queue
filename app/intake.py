@@ -38,6 +38,7 @@ from app.models import (
 )
 from app.schemas import (
     MAX_CONTEXT_LEN,
+    MAX_DEDUPE_KEY_LEN,
     MAX_DESCRIPTION_LEN,
     MAX_EMAIL_LEN,
     MAX_LINK_LABEL_LEN,
@@ -99,11 +100,18 @@ def create_request(
     requester_name: str | None = None,
     requester_email: str | None = None,
     status: RequestStatus = RequestStatus.submitted,
+    dedupe_key: str | None = None,
 ) -> Request:
     """Creates a request at `status` (default `submitted`) and returns it.
 
     Does not commit — the caller owns the transaction, matching
     `app/state_machine.py`'s convention. Does not notify anybody.
+
+    `dedupe_key` is an optional caller-supplied idempotency key, unique
+    across all requests. Storing a second request with a key already in use
+    raises IntegrityError on flush; callers that care (the HTTP intake
+    route) check for the key first and treat the error as the lost side of
+    a race.
     """
     if source == RequestSource.form:
         # The form source means "a human filled in the public form". Letting
@@ -136,6 +144,8 @@ def create_request(
         if link.label and len(link.label) > MAX_LINK_LABEL_LEN:
             raise IntakeError(f"A link label is too long (limit {MAX_LINK_LABEL_LEN} characters).")
 
+    dedupe_key = _bounded(dedupe_key, MAX_DEDUPE_KEY_LEN, "Dedupe key")
+
     req = Request(
         public_number=next_public_number(db),
         access_token=generate_access_token(),
@@ -149,6 +159,7 @@ def create_request(
         source=source,
         desired_completion_date=desired_completion_date,
         desired_date_reason=_bounded(desired_date_reason, MAX_REASON_LEN, "Desired date reason"),
+        dedupe_key=dedupe_key,
     )
     db.add(req)
     db.flush()

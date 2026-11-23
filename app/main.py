@@ -8,13 +8,14 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.db import Base, engine
 from app.rate_limit import limiter
 from app.routers import (
     archive,
     calendar,
     dashboard,
+    intake,
     owner_auth,
     public,
     quick_session,
@@ -56,10 +57,24 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     )
 
 
-app.include_router(public.router)
-app.include_router(owner_auth.router)
-app.include_router(dashboard.router)
-app.include_router(quick_session.router)
-app.include_router(archive.router)
-app.include_router(settings_router.router)
-app.include_router(calendar.router)
+def include_routers(app: FastAPI, app_settings: Settings) -> None:
+    """Mounts every router, and the intake router only if it's configured.
+
+    The intake endpoint is gated here rather than returning 404 from inside
+    itself, so an instance with no INTAKE_TOKEN genuinely has no such path —
+    nothing in the routing table and nothing in the OpenAPI schema. A
+    deployment that never meant to accept machine submissions exposes no
+    surface to probe at all.
+    """
+    app.include_router(public.router)
+    app.include_router(owner_auth.router)
+    app.include_router(dashboard.router)
+    app.include_router(quick_session.router)
+    app.include_router(archive.router)
+    app.include_router(settings_router.router)
+    app.include_router(calendar.router)
+    if app_settings.intake_enabled:
+        app.include_router(intake.router)
+
+
+include_routers(app, settings)

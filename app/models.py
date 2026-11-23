@@ -110,6 +110,14 @@ class Request(Base):
     desired_completion_date: Mapped[date | None] = mapped_column(Date, default=None)
     desired_date_reason: Mapped[str | None] = mapped_column(Text, default=None)
 
+    # Caller-supplied idempotency key for the HTTP intake endpoint, normally
+    # the RFC message-id of the originating email. Unique, so a sweep that
+    # re-runs — or two sweeps that both see the same message — cannot create
+    # a second request for it. Nullable, and SQLite treats NULLs in a unique
+    # index as distinct, so everything that arrives by any other route
+    # coexists without needing a key at all.
+    dedupe_key: Mapped[str | None] = mapped_column(String(500), unique=True, default=None)
+
     # Set when this request was generated from a standing commitment, so a
     # generated instance can be traced back to the rule that produced it.
     recurrence_id: Mapped[int | None] = mapped_column(

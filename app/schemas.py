@@ -18,6 +18,9 @@ MAX_LINK_URL_LEN = 2000
 MAX_LINK_LABEL_LEN = 200
 MAX_LINKS = 10
 MAX_REASON_LEN = 2000
+# Generous: an RFC message-id is short, but a caller may legitimately
+# qualify one ("<id>#register") to raise two tasks from a single message.
+MAX_DEDUPE_KEY_LEN = 500
 
 
 @dataclass

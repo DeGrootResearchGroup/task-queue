@@ -108,7 +108,13 @@ given.
 ### The intake endpoint
 
 `POST /intake/requests` is the machine-facing version of the script above, for
-a mail sweep that runs without anyone on the box.
+a mail sweep that runs without anyone on the box, and
+`GET /intake/requests/status` reads the resulting states back.
+
+One token covers both: it **grants read as well as write**. Holding it means
+being able to add items to "Awaiting review" *and* to see which messages were
+captured and what became of them. The read payload is kept narrow for that
+reason — see below.
 
 It exists only when `INTAKE_TOKEN_HASH` is set. Leave it blank — the default —
 and the route is never registered: the path does not exist and nothing appears
@@ -152,8 +158,8 @@ A bare JSON list works in place of `{"items": [...]}`. Every field above except
 `title`, `description` and `request_class` is optional; `source` defaults to
 `email` and may only be `email` or `manual`.
 
-**What a leaked token buys.** Items always land at `submitted`, and `source`
-can never be `form`. There is no field for a status, a queue position or a
+**What a leaked token buys.** On the write side, items always land at
+`submitted`, and `source` can never be `form`. There is no field for a status, a queue position or a
 requester, and unknown fields are refused rather than ignored — so the worst
 case is junk in "Awaiting review", which is reviewed before anything happens to
 it. The token goes in the `Authorization` header, compared in constant time; a
@@ -183,8 +189,48 @@ Two consequences worth knowing:
 Items with no `dedupe_key` are never deduplicated. Nothing infers a key from
 content — two identical items without keys are both stored.
 
-**The response** is `200` with a per-item result, so one bad row does not sink
-the batch:
+**Reading state back.** `GET /intake/requests/status` reports what became of
+each captured item, so a mail-side job can reflect it onto the message it came
+from — `dedupe_key` is the RFC message-id, so it is already the join key.
+
+```bash
+curl -G https://tasks.example.com/intake/requests/status \
+  -H "Authorization: Bearer $INTAKE_TOKEN" \
+  --data-urlencode "since=2026-11-23T09:00:00Z"
+```
+
+```json
+{"items": [{"dedupe_key": "<kuali-99@uwo.ca>", "public_number": "REQ-0007",
+            "status": "queued", "disposition": "active",
+            "updated_at": "2026-11-23T14:02:11Z"}],
+ "count": 1, "has_more": false, "next_cursor": null}
+```
+
+`disposition` is the coarse state, derived here so a client never encodes this
+app's state machine: `awaiting_review` (submitted), `active` (queued,
+in_progress, needs_information), `closed` (done, declined, withdrawn,
+cancelled). Adding a status later changes this mapping, not the caller. `status`
+is also returned, for anything that wants the detail.
+
+**The payload is deliberately narrow** — no title and no description. The same
+token now reads as well as writes, so a leaked one exposes which messages were
+captured and what became of them, not what the obligations say.
+
+Only rows with a `dedupe_key` are reported; a public form submission has no
+message to reconcile against. Rows in a terminal state keep appearing, since
+that is exactly what a mail job files on.
+
+- `since` filters on `updated_at` and is **inclusive**. `updated_at` resolves
+  only to the second, so an exclusive filter would silently drop anything
+  updated in the same second as your high-water mark. A row may therefore be
+  reported twice across polls; setting a flag again is a no-op.
+- Timestamps are UTC, suffixed `Z`. An offset-aware `since` is converted.
+- `limit` defaults to 200, maximum 500. When `has_more` is true, pass
+  `next_cursor` back as `cursor` for the next page — it is opaque, and keyed on
+  `(updated_at, id)` so paging terminates even when every row shares a second.
+
+**The response** to a write is `200` with a per-item result, so one bad row does
+not sink the batch:
 
 ```json
 {"results": [{"index": 0, "status": "created", "request_id": 1, "public_number": "REQ-0001", "dedupe_key": "<a@uwo.ca>"},

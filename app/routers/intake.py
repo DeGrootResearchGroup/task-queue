@@ -33,20 +33,22 @@ Only the token's SHA-256 digest lives on the server, so a leaked .env or
 a copied database yields nothing that can be presented here.
 """
 
+import base64
+import binascii
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
 from app.intake import IntakeError, Link, create_request
-from app.models import Request as RequestModel, RequestClass, RequestSource
+from app.models import Request as RequestModel, RequestClass, RequestSource, RequestStatus
 from app.rate_limit import limiter
 from app.security import intake_token_matches
 from app.schemas import (
@@ -69,6 +71,24 @@ _settings = get_settings()
 # token — can't turn one request into unbounded work.
 MAX_INTAKE_ITEMS = 50
 MAX_INTAKE_BODY_BYTES = 256 * 1024
+
+DEFAULT_STATUS_LIMIT = 200
+MAX_STATUS_LIMIT = 500
+
+# The coarse state the caller actually acts on, owned here so a client
+# never has to encode this app's state machine. Adding a RequestStatus
+# without adding it here is a test failure, not a client that silently
+# starts seeing nulls.
+DISPOSITIONS: dict[RequestStatus, str] = {
+    RequestStatus.submitted: "awaiting_review",
+    RequestStatus.queued: "active",
+    RequestStatus.in_progress: "active",
+    RequestStatus.needs_information: "active",
+    RequestStatus.done: "closed",
+    RequestStatus.declined: "closed",
+    RequestStatus.withdrawn: "closed",
+    RequestStatus.cancelled: "closed",
+}
 
 
 class IntakeLink(BaseModel):
@@ -236,3 +256,116 @@ async def intake_requests(request: Request, db: Session = Depends(get_db)):
     for result in results:
         counts[result["status"]] += 1
     return {"results": results, **counts}
+
+
+# ---------------------------------------------------------------------------
+# Status read-back
+# ---------------------------------------------------------------------------
+# So a mail-side job can reflect what became of each captured item back onto
+# the message it came from. `dedupe_key` is the RFC message-id, so it is
+# already the join key; this endpoint only has to say what the state is now.
+
+
+def _as_utc_naive(value: datetime) -> datetime:
+    """Normalises a client timestamp to match the stored column.
+
+    `updated_at` is naive and in UTC (SQLite's CURRENT_TIMESTAMP), so an
+    aware timestamp has to be converted and stripped before it can be
+    compared against it; a naive one is taken to be UTC already.
+    """
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def _iso_z(value: datetime) -> str:
+    """Renders a stored timestamp as unambiguous UTC."""
+    return f"{value.isoformat()}Z"
+
+
+def _encode_cursor(row: RequestModel) -> str:
+    return base64.urlsafe_b64encode(f"{row.updated_at.isoformat()}|{row.id}".encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime, int]:
+    raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+    timestamp, _, row_id = raw.rpartition("|")
+    return datetime.fromisoformat(timestamp), int(row_id)
+
+
+@router.get("/intake/requests/status")
+@limiter.limit(_settings.intake_rate_limit)
+def intake_request_status(
+    request: Request,
+    since: str = "",
+    cursor: str = "",
+    limit: int = DEFAULT_STATUS_LIMIT,
+    db: Session = Depends(get_db),
+):
+    """Reports the current state of every request captured from mail.
+
+    Deliberately narrow: `dedupe_key`, `public_number`, `status`,
+    `disposition` and `updated_at`, and nothing else. No title and no
+    description — the same token now reads as well as writes, and a leaked
+    one should expose which messages were captured and what became of them,
+    not what the Owner's obligations actually say.
+
+    Only rows with a `dedupe_key` are reported, since those are exactly the
+    ones with a message to reconcile against. A public form submission has
+    none.
+    """
+    if not _token_ok(request):
+        return _not_found()
+
+    if limit < 1 or limit > MAX_STATUS_LIMIT:
+        return _json_error(422, f"limit must be between 1 and {MAX_STATUS_LIMIT}.")
+
+    stmt = select(RequestModel).where(RequestModel.dedupe_key.is_not(None))
+
+    if cursor:
+        try:
+            cursor_timestamp, cursor_id = _decode_cursor(cursor)
+        except (ValueError, binascii.Error, UnicodeDecodeError):
+            return _json_error(422, "cursor is not a cursor returned by this endpoint.")
+        # Keyset pagination on (updated_at, id). The id tiebreak is what
+        # makes this safe at all: updated_at has one-second resolution, so a
+        # cursor carrying only a timestamp would stall forever if more rows
+        # shared that second than fit in one page.
+        stmt = stmt.where(
+            or_(
+                RequestModel.updated_at > cursor_timestamp,
+                (RequestModel.updated_at == cursor_timestamp) & (RequestModel.id > cursor_id),
+            )
+        )
+    elif since:
+        try:
+            since_timestamp = _as_utc_naive(datetime.fromisoformat(since))
+        except ValueError:
+            return _json_error(422, "since must be an ISO 8601 timestamp.")
+        # Inclusive, not exclusive. updated_at only resolves to the second,
+        # so an exclusive filter would silently drop anything updated in the
+        # same second as the caller's high-water mark. Re-reporting a row is
+        # harmless for a client that is setting a flag; missing one is not.
+        stmt = stmt.where(RequestModel.updated_at >= since_timestamp)
+
+    stmt = stmt.order_by(RequestModel.updated_at, RequestModel.id).limit(limit + 1)
+    rows = list(db.scalars(stmt))
+
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    return {
+        "items": [
+            {
+                "dedupe_key": row.dedupe_key,
+                "public_number": row.public_number,
+                "status": row.status.value,
+                "disposition": DISPOSITIONS[row.status],
+                "updated_at": _iso_z(row.updated_at),
+            }
+            for row in rows
+        ],
+        "count": len(rows),
+        "has_more": has_more,
+        "next_cursor": _encode_cursor(rows[-1]) if has_more and rows else None,
+    }

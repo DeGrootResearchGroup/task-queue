@@ -27,6 +27,10 @@ CALENDAR_STATUSES = (
     RequestStatus.queued,
     RequestStatus.in_progress,
     RequestStatus.needs_information,
+    # Blocked included on purpose. Waiting on somebody does not move the
+    # date the work is due -- if anything the deadline matters more, because
+    # the time left is being spent by someone else.
+    RequestStatus.blocked,
 )
 
 _SOURCE_TEXT = {

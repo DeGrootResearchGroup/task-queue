@@ -6,7 +6,7 @@ place, appends a `RequestEvent`, and leaves the caller responsible for
 whatever else the caller needs to do.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -67,6 +67,19 @@ def _remove_from_queue_and_renumber(db: Session, req: Request) -> None:
     req.queue_position = None
     for position, sibling in enumerate(siblings, start=1):
         sibling.queue_position = position
+
+
+def _clear_block_fields(req: Request) -> None:
+    """Drops the "waiting on" detail when a request stops being live.
+
+    Same reasoning as clearing `previous_status`: these describe a hold that
+    is on its way back, and a withdrawn or cancelled request is not. The
+    event log still has what it was waiting on.
+    """
+    req.blocked_on = None
+    req.blocked_until = None
+    req.blocked_note = None
+    req.blocked_at = None
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +186,18 @@ _INFO_ELIGIBLE = {
 def request_information(db: Session, req: Request, question: str) -> None:
     if req.status not in _INFO_ELIGIBLE:
         raise TransitionError("Information can only be requested for an active request.")
+    # Keyed on `requester_email` for the same reason `decline` is: that is
+    # exactly the condition under which the question has an audience. Without
+    # one this transition is a trap — the notification no-ops, and the only
+    # exit is `respond_to_information`, reachable solely from the requester's
+    # public tracking page. The request would sit in `needs_information`
+    # waiting on somebody who does not exist. `block` is the transition that
+    # was actually wanted.
+    if not req.requester_email:
+        raise TransitionError(
+            "There is no requester to ask. Put the request on hold instead, "
+            "naming who is being waited on."
+        )
     if not question or not question.strip():
         raise TransitionError("A question is required when requesting information.")
 
@@ -219,6 +244,94 @@ def respond_to_information(db: Session, req: Request, response: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Blocked — waiting on somebody outside the queue
+# ---------------------------------------------------------------------------
+
+# The same three statuses `request_information` accepts. A request can stall
+# on somebody else at any point while it is live: before it is even accepted
+# (the thing it asks for depends on a form a student has not sent), once it
+# is queued, or halfway through the work.
+_BLOCK_ELIGIBLE = {
+    RequestStatus.submitted,
+    RequestStatus.queued,
+    RequestStatus.in_progress,
+}
+
+
+def block(db: Session, req: Request, waiting_on: str, until: date | None = None, note: str | None = None) -> None:
+    """Parks a live request because a third party owes something.
+
+    Deliberately *not* `needs_information`. That status means a registered
+    requester was asked a question and can answer it on their tracking page
+    — `respond_to_information` is reachable from nowhere else. Applied to a
+    request captured from the Owner's own mailbox it is a trap: there is no
+    requester, the notification is a no-op, and the only exit is the Owner
+    opening the public tracking URL and role-playing the person who does not
+    exist.
+
+    What was actually missing is this: the thing is real, accepted and still
+    wanted, but it cannot move until somebody outside the system acts. The
+    Owner releases it, because the Owner is the only one who will know.
+
+    `waiting_on` is required. A hold that does not name its second party
+    cannot be chased, and an unchaseable hold is a dropped task with a
+    tidier label.
+    """
+    if req.status not in _BLOCK_ELIGIBLE:
+        raise TransitionError("Only an active request can be put on hold.")
+    if not waiting_on or not waiting_on.strip():
+        raise TransitionError("Say who or what is being waited on.")
+
+    req.previous_status = req.status
+    if req.status == RequestStatus.queued:
+        req.previous_queue_position = req.queue_position
+        _remove_from_queue_and_renumber(db, req)
+
+    req.status = RequestStatus.blocked
+    req.blocked_on = waiting_on.strip()
+    req.blocked_until = until
+    req.blocked_note = note.strip() if note and note.strip() else None
+    req.blocked_at = _now()
+    _log(
+        db,
+        req,
+        EventType.blocked,
+        {"waiting_on": req.blocked_on, "until": until.isoformat() if until else None},
+    )
+
+
+def unblock(db: Session, req: Request) -> None:
+    """Returns a blocked request to exactly where it was waiting.
+
+    Mirrors `respond_to_information`, including the queue-position restore,
+    so a long action that was third in line goes back to third rather than
+    to the bottom. Being blocked was not its fault.
+    """
+    if req.status != RequestStatus.blocked:
+        raise TransitionError("This request is not on hold.")
+    if req.previous_status is None:
+        raise TransitionError("No previous state recorded; cannot restore request.")
+
+    restored_status = req.previous_status
+    if restored_status == RequestStatus.queued:
+        _insert_into_queue(db, req, target_position=req.previous_queue_position)
+        req.previous_queue_position = None
+    else:
+        req.status = restored_status
+
+    req.previous_status = None
+    was_waiting_on = req.blocked_on
+    # Cleared so the next hold starts clean and nothing reads a stale
+    # "waiting on" off a request that is moving again. The event log keeps
+    # the history; these fields describe the present.
+    req.blocked_on = None
+    req.blocked_until = None
+    req.blocked_note = None
+    req.blocked_at = None
+    _log(db, req, EventType.unblocked, {"was_waiting_on": was_waiting_on} if was_waiting_on else None)
+
+
+# ---------------------------------------------------------------------------
 # Statuses in which a request is still "open" — the requester can still
 # withdraw it or add information to it. Anything outside this set (done,
 # declined, withdrawn) is closed and shouldn't accept further requester
@@ -230,6 +343,7 @@ _ACTIVE_STATUSES = {
     RequestStatus.queued,
     RequestStatus.in_progress,
     RequestStatus.needs_information,
+    RequestStatus.blocked,
 }
 
 
@@ -247,6 +361,7 @@ def withdraw(db: Session, req: Request) -> None:
     req.withdrawn_at = _now()
     req.previous_status = None
     req.previous_queue_position = None
+    _clear_block_fields(req)
     _log(db, req, EventType.withdrawn)
 
 
@@ -292,6 +407,7 @@ def cancel(db: Session, req: Request, reason: str | None = None) -> None:
     # something while a request is on its way back, and this one is not.
     req.previous_status = None
     req.previous_queue_position = None
+    _clear_block_fields(req)
     _log(db, req, EventType.cancelled, {"reason": req.cancel_reason} if req.cancel_reason else None)
 
 

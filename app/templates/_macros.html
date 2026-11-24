@@ -15,6 +15,7 @@
   {%- elif status == 'queued' -%}Queued
   {%- elif status == 'in_progress' -%}In Progress
   {%- elif status == 'needs_information' -%}Needs Information
+  {%- elif status == 'blocked' -%}On Hold
   {%- elif status == 'done' -%}Completed
   {%- elif status == 'declined' -%}Declined
   {%- elif status == 'withdrawn' -%}Withdrawn
@@ -29,6 +30,7 @@
     'queued': 'text-bg-primary',
     'in_progress': 'text-bg-info',
     'needs_information': 'text-bg-warning',
+    'blocked': 'text-bg-warning',
     'done': 'text-bg-success',
     'declined': 'text-bg-secondary',
     'withdrawn': 'text-bg-secondary',

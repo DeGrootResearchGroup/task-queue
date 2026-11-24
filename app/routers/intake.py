@@ -91,6 +91,11 @@ DISPOSITIONS: dict[RequestStatus, str] = {
     RequestStatus.queued: "active",
     RequestStatus.in_progress: "active",
     RequestStatus.needs_information: "active",
+    # Active, emphatically. A blocked request is still live work waiting on
+    # somebody, so the mail sweep must keep its flag set and leave the
+    # originating message in the Inbox. Calling it "closed" would file away
+    # the one message that proves what is being waited for.
+    RequestStatus.blocked: "active",
     RequestStatus.done: "closed",
     RequestStatus.declined: "closed",
     RequestStatus.withdrawn: "closed",

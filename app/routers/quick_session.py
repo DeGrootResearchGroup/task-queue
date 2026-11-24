@@ -9,8 +9,12 @@ from app.db import commit_and_refresh
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
 from app.models import AppSettings, Request as RequestModel, RequestClass, RequestStatus
-from app.notifications import notify_requester_completed, notify_requester_needs_information
-from app.state_machine import complete, move_to_long_actions, request_information
+from app.notifications import (
+    notify_requester_blocked,
+    notify_requester_completed,
+    notify_requester_needs_information,
+)
+from app.state_machine import block, complete, move_to_long_actions, request_information
 from app.templating import render
 from app.utils import urgency_level
 
@@ -107,6 +111,30 @@ def quick_need_info(
         notify_requester_needs_information, str(request.base_url), req, question.strip(), settings_row
     )
     flash(request, f"Information requested for: {req.title}", "success")
+    return RedirectResponse(url="/quick-session", status_code=303)
+
+
+@router.post("/quick-session/{request_id}/block", dependencies=[Depends(verify_csrf)])
+def quick_block(
+    request_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    waiting_on: str = Form(...),
+    db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
+):
+    """Parks a Quick Action on somebody else and moves the session on.
+
+    No chase date here, unlike the detail page. A quick session is a
+    run-through and anything that is not one field slows it to the point
+    where the honest state stops being used; the date can be added from the
+    request itself afterwards.
+    """
+    req = _get_quick_request_or_404(db, request_id)
+    block(db, req, waiting_on)
+    commit_and_refresh(db, req, settings_row)
+    background_tasks.add_task(notify_requester_blocked, str(request.base_url), req, settings_row)
+    flash(request, f"On hold, waiting on {req.blocked_on}: {req.title}", "success")
     return RedirectResponse(url="/quick-session", status_code=303)
 
 

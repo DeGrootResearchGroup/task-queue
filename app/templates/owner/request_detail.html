@@ -1,5 +1,36 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m %}
+
+{#- The hold form, defined once and used from every active status. The
+    Request Information forms below are written out four times with
+    hand-numbered field ids; that is the pattern being avoided here. -#}
+{% macro hold_form(req, csrf_token, n) %}
+  <details>
+    <summary class="btn btn-outline-secondary">Put on hold</summary>
+    <form method="post" action="/requests/{{ req.id }}/block" class="card card-body mt-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <p class="small text-muted">
+        Takes this out of the queue while somebody else has it, without closing it.
+        Its queue position is kept and restored when you take it off hold.
+      </p>
+      <div class="mb-2">
+        <label for="waiting_on{{ n }}" class="form-label">Waiting on whom, for what?</label>
+        <input type="text" class="form-control" id="waiting_on{{ n }}" name="waiting_on"
+               placeholder="e.g. Mahsa — signed leave form" required>
+      </div>
+      <div class="mb-2">
+        <label for="until{{ n }}" class="form-label">Chase up on (optional)</label>
+        <input type="date" class="form-control" id="until{{ n }}" name="until">
+        <div class="form-text">Not a deadline — the date this starts showing up as needing a nudge.</div>
+      </div>
+      <div class="mb-2">
+        <label for="blocknote{{ n }}" class="form-label">Note (optional)</label>
+        <textarea class="form-control" id="blocknote{{ n }}" name="note" rows="2"></textarea>
+      </div>
+      <div><button type="submit" class="btn btn-primary btn-sm">Put on hold</button></div>
+    </form>
+  </details>
+{% endmacro %}
 {% block title %}{{ req.title }} — {{ req.public_number }}{% endblock %}
 {% block content %}
   <div class="row justify-content-center">
@@ -72,6 +103,15 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-primary">Accept &amp; Queue</button>
               </form>
+              {#- Only where there is somebody to ask. `needs_information` is
+                  narrower than its name: the question goes out by email and the
+                  only way back is the requester answering on their tracking
+                  page. On an `email` or `manual` request there is no requester,
+                  the notification silently no-ops, and the request strands in a
+                  status nobody can release. Put it on hold instead — that is
+                  what the Owner actually means here, and it is right there in
+                  the same row. -#}
+              {% if req.requester_email %}
               <details>
                 <summary class="btn btn-outline-secondary">Request Information</summary>
                 <form method="post" action="/requests/{{ req.id }}/request-info" class="card card-body mt-2">
@@ -83,6 +123,8 @@
                   <button type="submit" class="btn btn-primary btn-sm">Send</button>
                 </form>
               </details>
+              {% endif %}
+              {{ hold_form(req, csrf_token, 1) }}
               <details>
                 <summary class="btn btn-outline-danger">Decline</summary>
                 <form method="post" action="/requests/{{ req.id }}/decline" class="card card-body mt-2">
@@ -111,6 +153,15 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-primary">Start Work</button>
               </form>
+              {#- Only where there is somebody to ask. `needs_information` is
+                  narrower than its name: the question goes out by email and the
+                  only way back is the requester answering on their tracking
+                  page. On an `email` or `manual` request there is no requester,
+                  the notification silently no-ops, and the request strands in a
+                  status nobody can release. Put it on hold instead — that is
+                  what the Owner actually means here, and it is right there in
+                  the same row. -#}
+              {% if req.requester_email %}
               <details>
                 <summary class="btn btn-outline-secondary">Request Information</summary>
                 <form method="post" action="/requests/{{ req.id }}/request-info" class="card card-body mt-2">
@@ -122,6 +173,7 @@
                   <button type="submit" class="btn btn-primary btn-sm">Send</button>
                 </form>
               </details>
+              {% endif %}
               <details>
                 <summary class="btn btn-outline-secondary">Mark Done</summary>
                 <form method="post" action="/requests/{{ req.id }}/complete" class="card card-body mt-2">
@@ -133,6 +185,7 @@
                   <button type="submit" class="btn btn-primary btn-sm">Complete</button>
                 </form>
               </details>
+              {{ hold_form(req, csrf_token, 2) }}
             </div>
 
           {% elif req.status.value == 'queued' and req.request_class.value == 'quick' %}
@@ -141,6 +194,15 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-primary">Done</button>
               </form>
+              {#- Only where there is somebody to ask. `needs_information` is
+                  narrower than its name: the question goes out by email and the
+                  only way back is the requester answering on their tracking
+                  page. On an `email` or `manual` request there is no requester,
+                  the notification silently no-ops, and the request strands in a
+                  status nobody can release. Put it on hold instead — that is
+                  what the Owner actually means here, and it is right there in
+                  the same row. -#}
+              {% if req.requester_email %}
               <details>
                 <summary class="btn btn-outline-secondary">Need Information</summary>
                 <form method="post" action="/requests/{{ req.id }}/request-info" class="card card-body mt-2">
@@ -152,10 +214,12 @@
                   <button type="submit" class="btn btn-primary btn-sm">Send</button>
                 </form>
               </details>
+              {% endif %}
               <form method="post" action="/requests/{{ req.id }}/move-to-long">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-outline-secondary">Move to Long Actions</button>
               </form>
+              {{ hold_form(req, csrf_token, 3) }}
             </div>
 
           {% elif req.status.value == 'in_progress' %}
@@ -171,6 +235,15 @@
                   <button type="submit" class="btn btn-primary btn-sm">Confirm Complete</button>
                 </form>
               </details>
+              {#- Only where there is somebody to ask. `needs_information` is
+                  narrower than its name: the question goes out by email and the
+                  only way back is the requester answering on their tracking
+                  page. On an `email` or `manual` request there is no requester,
+                  the notification silently no-ops, and the request strands in a
+                  status nobody can release. Put it on hold instead — that is
+                  what the Owner actually means here, and it is right there in
+                  the same row. -#}
+              {% if req.requester_email %}
               <details>
                 <summary class="btn btn-outline-secondary">Request Information</summary>
                 <form method="post" action="/requests/{{ req.id }}/request-info" class="card card-body mt-2">
@@ -182,6 +255,8 @@
                   <button type="submit" class="btn btn-primary btn-sm">Send</button>
                 </form>
               </details>
+              {% endif %}
+              {{ hold_form(req, csrf_token, 4) }}
               {% if req.request_class.value == 'long' %}
               <form method="post" action="/requests/{{ req.id }}/return-to-queue">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -195,6 +270,27 @@
             {% set open_q = req.info_requests|selectattr('responded_at', 'none')|list|last %}
             {% if open_q %}<blockquote class="mb-2">{{ open_q.owner_question }}</blockquote>{% endif %}
             <p class="small text-muted mb-0">This request will automatically resume once the requester responds via their tracking link.</p>
+
+          {% elif req.status.value == 'blocked' %}
+            <p class="mb-2">
+              On hold since {{ req.blocked_at.strftime('%B %-d, %Y') if req.blocked_at else '' }},
+              waiting on <strong>{{ req.blocked_on }}</strong>.
+            </p>
+            {% if req.blocked_until %}
+              <p class="small {{ 'text-danger fw-semibold' if req.blocked_until <= today() else 'text-muted' }}">
+                {{ 'Due a nudge since' if req.blocked_until <= today() else 'Chase up on' }}
+                {{ req.blocked_until.strftime('%B %-d, %Y') }}.
+              </p>
+            {% endif %}
+            {% if req.blocked_note %}<blockquote class="mb-3">{{ req.blocked_note }}</blockquote>{% endif %}
+            <form method="post" action="/requests/{{ req.id }}/unblock">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="btn btn-primary">Take off hold</button>
+            </form>
+            <p class="small text-muted mt-2 mb-0">
+              Goes back to {{ m.status_label(req.previous_status.value) if req.previous_status else 'where it was' }}{{
+              ', at queue position ' ~ req.previous_queue_position if req.previous_queue_position }}.
+            </p>
 
           {% elif req.status.value == 'done' %}
             <p>Completed {{ req.completed_at.strftime('%B %-d, %Y') if req.completed_at else '' }}.</p>
@@ -219,7 +315,7 @@
               because the occasion for a request can go away at any point
               before it is finished. Kept apart from the status-specific
               actions above so it reads as the escape hatch it is. -#}
-          {% if req.status.value in ('submitted', 'queued', 'in_progress', 'needs_information') %}
+          {% if req.status.value in ('submitted', 'queued', 'in_progress', 'needs_information', 'blocked') %}
             <div class="border-top mt-3 pt-3">
               <details>
                 <summary class="btn btn-outline-secondary btn-sm">Cancel — no longer needed</summary>

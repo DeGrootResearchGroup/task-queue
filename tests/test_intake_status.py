@@ -290,12 +290,32 @@ class TestUpdatedAtMoves:
 
     @pytest.mark.parametrize(
         "transition",
-        ["accept", "decline", "cancel", "complete", "withdraw", "request_information"],
+        [
+            "accept",
+            "decline",
+            "cancel",
+            "complete",
+            "withdraw",
+            "request_information",
+            "block",
+            "unblock",
+        ],
     )
     def test_every_transition_bumps_updated_at(self, db_session, transition):
         from app import state_machine as sm
 
-        req = make(db_session, key=f"<{transition}@uwo.ca>")
+        # `request_information` now refuses a request with nobody to ask —
+        # these are `email`-source rows, which have no requester — so that
+        # case gets one. `block` is the transition for the rest of them.
+        extra = (
+            {"requester_name": "Alice", "requester_email": "alice@example.com"}
+            if transition == "request_information"
+            else {}
+        )
+        req = make(db_session, key=f"<{transition}@uwo.ca>", **extra)
+        if transition == "unblock":
+            sm.block(db_session, req, "The Registrar")
+            db_session.commit()
         if transition in ("complete", "withdraw"):
             sm.accept_and_queue(db_session, req)
             db_session.commit()
@@ -310,6 +330,8 @@ class TestUpdatedAtMoves:
             "complete": lambda: sm.complete(db_session, req, "done"),
             "withdraw": lambda: sm.withdraw(db_session, req),
             "request_information": lambda: sm.request_information(db_session, req, "which one?"),
+            "block": lambda: sm.block(db_session, req, "The Registrar"),
+            "unblock": lambda: sm.unblock(db_session, req),
         }
         actions[transition]()
         db_session.commit()

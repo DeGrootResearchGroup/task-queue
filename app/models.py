@@ -66,6 +66,20 @@ class RequestStatus(str, enum.Enum):
     queued = "queued"
     in_progress = "in_progress"
     needs_information = "needs_information"
+    # Live work that cannot proceed because somebody outside the queue owes
+    # something: a student who has to submit a form, a co-author who has to
+    # send a draft, an office that has to reply. Distinct from
+    # `needs_information`, which is narrower than it sounds -- that one means
+    # a *registered requester* was asked a question through their tracking
+    # link, and its only exit is that person answering on the public page.
+    # A blocked request has no second party in the system at all, so it is
+    # released by the Owner, from the dashboard, when the thing arrives.
+    #
+    # It leaves the queue while it waits, for the same reason
+    # `needs_information` does: a prioritised list of what to do next must
+    # not be padded with work that cannot be done. `previous_queue_position`
+    # carries the place back.
+    blocked = "blocked"
     done = "done"
     declined = "declined"
     withdrawn = "withdrawn"
@@ -90,6 +104,8 @@ class EventType(str, enum.Enum):
     moved_to_long = "moved_to_long"
     information_added = "information_added"
     reordered = "reordered"
+    blocked = "blocked"
+    unblocked = "unblocked"
 
 
 class Request(Base):
@@ -173,6 +189,21 @@ class Request(Base):
 
     queue_position: Mapped[int | None] = mapped_column(Integer, default=None)
     previous_queue_position: Mapped[int | None] = mapped_column(Integer, default=None)
+
+    # --- Blocked only -------------------------------------------------
+    # Who or what is being waited on. Required by state_machine.block and
+    # not nullable in spirit, only in schema: naming the second party is the
+    # entire point of the status. "On hold" with no name attached is how a
+    # task stops being work and becomes furniture.
+    blocked_on: Mapped[str | None] = mapped_column(String(300), default=None)
+    # Optional. The date to chase, not a deadline -- `desired_completion_date`
+    # still holds when the work itself is due, and blocking does not move it.
+    # Its job is to make the dashboard say "this has been waiting long
+    # enough", because a hold nobody is reminded of is indistinguishable
+    # from having dropped the thing.
+    blocked_until: Mapped[date | None] = mapped_column(Date, default=None)
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
+    blocked_note: Mapped[str | None] = mapped_column(Text, default=None)
 
     decline_reason: Mapped[str | None] = mapped_column(Text, default=None)
     cancel_reason: Mapped[str | None] = mapped_column(Text, default=None)

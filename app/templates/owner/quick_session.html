@@ -53,6 +53,10 @@
           </form>
 
           <div class="d-flex flex-wrap gap-2 mt-3">
+            {#- Only where there is somebody to ask: see the same gate on the
+                request detail page. Without a requester this strands the
+                request in a status only the public tracking page can leave. -#}
+            {% if req.requester_email %}
             <details>
               <summary class="btn btn-outline-secondary">Need Information</summary>
               <form method="post" action="/quick-session/{{ req.id }}/need-info" class="card card-body mt-2">
@@ -62,6 +66,23 @@
                   <textarea class="form-control" id="question" name="question" rows="2" required></textarea>
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm">Send</button>
+              </form>
+            </details>
+            {% endif %}
+            {#- Deliberately leaner than the detail page's version: a quick
+                session is a run-through, and the one field that makes a hold
+                chaseable is who is being waited on. The date and note can be
+                added later from the request itself. -#}
+            <details>
+              <summary class="btn btn-outline-secondary">Put on hold</summary>
+              <form method="post" action="/quick-session/{{ req.id }}/block" class="card card-body mt-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="mb-2">
+                  <label for="waiting_on" class="form-label">Waiting on whom, for what?</label>
+                  <input type="text" class="form-control" id="waiting_on" name="waiting_on"
+                         placeholder="e.g. Mahsa — signed leave form" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Put on hold</button>
               </form>
             </details>
             <form method="post" action="/quick-session/{{ req.id }}/move-to-long">

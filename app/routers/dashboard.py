@@ -11,6 +11,7 @@ from app.flash import flash
 from app.models import AppSettings, Request as RequestModel, RequestClass, RequestSource, RequestStatus
 from app.notifications import (
     notify_requester_accepted,
+    notify_requester_blocked,
     notify_requester_cancelled,
     notify_requester_completed,
     notify_requester_declined,
@@ -18,6 +19,7 @@ from app.notifications import (
 )
 from app.state_machine import (
     accept_and_queue,
+    block,
     cancel,
     complete,
     decline,
@@ -28,6 +30,7 @@ from app.state_machine import (
     request_information,
     return_to_queue,
     start_work,
+    unblock,
 )
 from app.templating import render
 from app.utils import urgency_level
@@ -42,6 +45,7 @@ OPEN_STATUSES = (
     RequestStatus.queued,
     RequestStatus.in_progress,
     RequestStatus.needs_information,
+    RequestStatus.blocked,
 )
 
 
@@ -143,6 +147,17 @@ def dashboard(
         )
     ).all()
 
+    # Ordered by the chase date, nulls last, so the ones that have been
+    # waiting past their nudge date sit at the top where they get seen. A
+    # hold with no date still appears — it just has nothing pulling it up.
+    blocked = db.scalars(
+        scoped(
+            select(RequestModel)
+            .where(RequestModel.status == RequestStatus.blocked)
+            .order_by(RequestModel.blocked_until.is_(None), RequestModel.blocked_until)
+        )
+    ).all()
+
     source_counts = {
         s.value: db.scalar(
             select(func.count())
@@ -165,6 +180,10 @@ def dashboard(
             "quick_pending": quick_pending[:8],
             "quick_pending_count": len(quick_pending),
             "needs_info": needs_info,
+            "blocked": [
+                {"req": r, "overdue": r.blocked_until is not None and r.blocked_until <= date.today()}
+                for r in blocked
+            ],
             "active_source": active_source.value if active_source else "",
             "source_counts": source_counts,
         },
@@ -249,6 +268,43 @@ def request_info(
         notify_requester_needs_information, str(request.base_url), req, question.strip(), settings_row
     )
     flash(request, "Information requested. The requester has been notified via their tracking page.", "success")
+    return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
+
+
+@router.post("/requests/{request_id}/block", dependencies=[Depends(verify_csrf)])
+def block_request(
+    request_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    waiting_on: str = Form(...),
+    until: str = Form(""),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
+):
+    req = _get_request_or_404(db, request_id)
+    # Parsed here rather than typed as `date | None` on the parameter,
+    # because an empty string is what an untouched date input posts and
+    # FastAPI would 422 on it. A malformed one is treated as absent: the
+    # chase date is a convenience, and refusing the whole hold over it
+    # would be the wrong trade.
+    try:
+        chase_date = date.fromisoformat(until) if until.strip() else None
+    except ValueError:
+        chase_date = None
+    block(db, req, waiting_on, chase_date, note)
+    commit_and_refresh(db, req, settings_row)
+    background_tasks.add_task(notify_requester_blocked, str(request.base_url), req, settings_row)
+    flash(request, f"{req.title} is on hold, waiting on {req.blocked_on}.", "success")
+    return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
+
+
+@router.post("/requests/{request_id}/unblock", dependencies=[Depends(verify_csrf)])
+def unblock_request(request_id: int, request: Request, db: Session = Depends(get_db)):
+    req = _get_request_or_404(db, request_id)
+    unblock(db, req)
+    db.commit()
+    flash(request, f"{req.title} is off hold.", "success")
     return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
 
 

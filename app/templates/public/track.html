@@ -82,6 +82,20 @@
           </div>
         </div>
 
+      {% elif req.status.value == 'blocked' %}
+        <div class="card status-card mb-4">
+          <div class="card-body">
+            <h2 class="h5">On Hold</h2>
+            <p>This request has not been forgotten and has not been declined. It is waiting on
+               something outside it before it can move.</p>
+            <p class="mb-0"><strong>Waiting on:</strong> {{ req.blocked_on }}</p>
+            {#- No chase date shown. It is a private working note about when to
+                nudge somebody, and publishing it to the requester would read as
+                a commitment that it will be resolved by then. -#}
+            <p class="small text-muted mb-0 mt-2">There is nothing you need to do.</p>
+          </div>
+        </div>
+
       {% elif req.status.value == 'done' %}
         <div class="card status-card done mb-4">
           <div class="card-body">

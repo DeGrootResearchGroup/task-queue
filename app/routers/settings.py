@@ -31,6 +31,7 @@ OPEN_STATUSES = (
     RequestStatus.queued,
     RequestStatus.in_progress,
     RequestStatus.needs_information,
+    RequestStatus.blocked,
 )
 
 

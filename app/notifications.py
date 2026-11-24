@@ -108,6 +108,35 @@ def notify_requester_needs_information(
 
 
 @_requires_requester
+def notify_requester_blocked(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
+    """Tells a requester their request has stalled, and on what.
+
+    No-op without a requester, like every other message here -- which is the
+    common case for this status, since blocking exists mainly for the
+    Owner's own captured items. It earns its place for the form requests:
+    a tracking page that silently stops moving reads as "forgotten", and
+    "waiting on the Registrar" is the one fact that makes the wait make
+    sense. There is nothing for them to do, so the message says so.
+    """
+    until_line = (
+        f"\n\nI expect to chase this up around {req.blocked_until.strftime('%B %-d, %Y')}."
+        if req.blocked_until
+        else ""
+    )
+    body = (
+        f"Hi {req.requester_name},\n\n"
+        f'Your request "{req.title}" is on hold. It has not been forgotten and it has not '
+        f"been declined — it just cannot move until something outside it happens.\n\n"
+        f"Waiting on: {req.blocked_on}{until_line}\n\n"
+        f"There is nothing you need to do. Follow it at:\n{_tracking_url(base_url, req)}\n\n"
+        f"— {settings_row.owner_display_name}"
+    )
+    send_email(
+        req.requester_email, f"[{req.public_number}] On hold: {req.title}", body, _from_name(settings_row)
+    )
+
+
+@_requires_requester
 def notify_requester_cancelled(base_url: str, req: RequestModel, settings_row: AppSettings) -> None:
     reason_line = f"\n\nReason: {req.cancel_reason}" if req.cancel_reason else ""
     body = (

@@ -30,7 +30,7 @@
           <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="/requests/{{ item.req.id }}">
             <div class="flex-grow-1 min-width-0">
               <div class="row-title fw-semibold text-truncate">{{ item.req.title }} {{ m.source_pill(item.req.source.value) }}</div>
-              <div class="small text-muted">{{ m.origin_line(item.req) }} &middot; {{ 'Quick Action' if item.req.request_class.value == 'quick' else 'Long Action' }} &middot; submitted {{ item.req.created_at.strftime('%b %-d') }}</div>
+              <div class="small text-muted">{{ m.origin_line(item.req) }} &middot; {{ class_label(item.req.request_class) }} &middot; submitted {{ item.req.created_at.strftime('%b %-d') }}</div>
             </div>
             {{ m.urgency_badge(item.urgency, item.req.desired_completion_date.strftime('%b %-d') if item.req.desired_completion_date else '', item.days_text) }}
           </a>

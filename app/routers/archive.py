@@ -38,7 +38,7 @@ def archive(
     else:
         stmt = stmt.where(RequestModel.status.in_(ARCHIVE_STATUSES))
 
-    if request_class in ("quick", "long"):
+    if request_class in ("quick", "long", "event"):
         stmt = stmt.where(RequestModel.request_class == RequestClass(request_class))
 
     if q.strip():

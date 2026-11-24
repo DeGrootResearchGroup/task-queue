@@ -82,7 +82,18 @@ def accept_and_queue(db: Session, req: Request) -> None:
     # the bottom of the Quick queue, which is exactly the right outcome.
     if req.status != RequestStatus.submitted:
         raise TransitionError("Only a Submitted request can be accepted.")
-    _insert_into_queue(db, req, target_position=None)  # bottom of queue
+    if req.request_class == RequestClass.event:
+        # An event is not queued work. Its time is already fixed, so
+        # ordering it against the Quick and Long queues would be
+        # meaningless -- and worse, it would pad the prioritised list the
+        # queue exists to produce. It goes to `queued` all the same,
+        # because that is the status the rest of the system reads as
+        # "live": the mail sweep keeps its flag set, and the write step
+        # picks it up from there.
+        req.status = RequestStatus.queued
+        req.queue_position = None
+    else:
+        _insert_into_queue(db, req, target_position=None)  # bottom of queue
     _log(db, req, EventType.accepted)
 
 

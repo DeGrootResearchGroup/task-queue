@@ -17,7 +17,7 @@ deadline markers only. Anything that is genuinely "be in this room at
 
 from datetime import UTC, date, datetime, timedelta
 
-from app.models import Request, RequestSource, RequestStatus
+from app.models import Request, RequestSource, RequestStatus, class_label
 
 # Statuses worth putting on a calendar: work that is still live. A done,
 # declined or withdrawn request has no deadline left to miss, and leaving
@@ -77,7 +77,7 @@ def _event(req: Request, admin_base_url: str, dtstamp: str) -> list[str]:
     due: date = req.desired_completion_date
     details = [
         f"Status: {req.status.value.replace('_', ' ')}",
-        f"Type: {'Quick Action' if req.request_class.value == 'quick' else 'Long Action'}",
+        f"Type: {class_label(req.request_class)}",
         f"Source: {_SOURCE_TEXT.get(req.source, req.source.value)}",
     ]
     if req.requester_name:

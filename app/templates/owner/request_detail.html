@@ -9,7 +9,7 @@
       <h1 class="h3 mb-1">{{ req.title }}</h1>
       <p class="text-muted mb-4">
         {{ req.public_number }} &middot;
-        {{ 'Quick Action' if req.request_class.value == 'quick' else 'Long Action' }} &middot;
+        {{ class_label(req.request_class) }} &middot;
         {{ m.status_pill(req.status.value) }}
         {{ m.source_pill(req.source.value) }}
       </p>

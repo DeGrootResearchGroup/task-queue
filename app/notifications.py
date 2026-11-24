@@ -12,7 +12,7 @@ from collections.abc import Callable
 
 from app.config import get_settings
 from app.email import send_email
-from app.models import AppSettings
+from app.models import AppSettings, class_label
 from app.models import Request as RequestModel
 
 
@@ -140,7 +140,7 @@ def notify_owner_new_request(base_url: str, req: RequestModel, settings_row: App
     settings = get_settings()
     if not settings.owner_notification_email:
         return
-    kind = "Quick Action" if req.request_class.value == "quick" else "Long Action"
+    kind = class_label(req.request_class)
     body = (
         f"New {kind} submitted by {req.requester_name} ({req.requester_email}):\n\n"
         f'"{req.title}"\n\n'

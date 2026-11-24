@@ -40,7 +40,7 @@ from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -115,6 +115,25 @@ class IntakeItem(BaseModel):
     additional_context: str | None = Field(default=None, max_length=MAX_CONTEXT_LEN)
     links: list[IntakeLink] = Field(default_factory=list, max_length=MAX_LINKS)
     dedupe_key: str | None = Field(default=None, max_length=MAX_DEDUPE_KEY_LEN)
+
+    # Events only. `calendar_uid` is deliberately NOT accepted -- it is set
+    # by the write step once the event is really on the calendar, and a
+    # caller supplying one would let an event be marked written without
+    # anything having been written.
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    location: str | None = Field(default=None, max_length=300)
+
+    @model_validator(mode="after")
+    def _check_event_times(self) -> "IntakeItem":
+        if self.request_class == RequestClass.event:
+            if self.starts_at is None or self.ends_at is None:
+                raise ValueError("An event needs both starts_at and ends_at.")
+            if self.ends_at <= self.starts_at:
+                raise ValueError("An event's ends_at must be after its starts_at.")
+        elif self.starts_at is not None or self.ends_at is not None or self.location is not None:
+            raise ValueError("starts_at, ends_at and location apply only to request_class 'event'.")
+        return self
 
 
 def _json_error(status_code: int, detail: str) -> JSONResponse:
@@ -198,6 +217,9 @@ def _store_item(db: Session, item: IntakeItem, index: int) -> dict:
                 additional_context=item.additional_context,
                 links=[Link(url=link.url, label=link.label) for link in item.links],
                 dedupe_key=item.dedupe_key,
+                starts_at=item.starts_at,
+                ends_at=item.ends_at,
+                location=item.location,
             )
             # Read now, while the instance is attached and unexpired: the
             # commit at the end of the batch expires every attribute.
@@ -368,4 +390,126 @@ def intake_request_status(
         "count": len(rows),
         "has_more": has_more,
         "next_cursor": _encode_cursor(rows[-1]) if has_more and rows else None,
+    }
+
+
+class EventWritten(BaseModel):
+    """What the sweep reports back after creating a calendar event."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    calendar_uid: str = Field(min_length=1, max_length=300)
+
+
+@router.get("/intake/events/pending")
+@limiter.limit(_settings.intake_rate_limit)
+def intake_events_pending(
+    request: Request,
+    limit: int = DEFAULT_STATUS_LIMIT,
+    db: Session = Depends(get_db),
+):
+    """Accepted events that are not yet on the calendar.
+
+    The sweep reads this, creates each one in the Western Exchange
+    calendar, and reports the UID back to `/intake/events/{number}/written`.
+
+    **This endpoint returns titles, and `/intake/requests/status`
+    deliberately does not.** That is a real narrowing of the property
+    documented there — a leaked token now reveals the text of something,
+    not just which messages were captured. It is unavoidable: you cannot
+    write a calendar event without its summary. What keeps the exposure
+    small is the filter. Only *accepted* events *awaiting a write* appear,
+    which is a handful of rows that empty themselves on the next sweep,
+    rather than the whole queue.
+
+    The gate is `status == queued`, never `submitted`. An event must reach
+    Exchange only once the Owner has accepted it: anything that blocks his
+    availability for colleagues booking through Outlook has to be his
+    decision, not a consequence of capture. Note this is deliberately NOT
+    `CALENDAR_STATUSES`, which includes `submitted` — harmless for the
+    feed's transparent deadline markers, wrong here.
+    """
+    if not _token_ok(request):
+        return _not_found()
+
+    if limit < 1 or limit > MAX_STATUS_LIMIT:
+        return _json_error(422, f"limit must be between 1 and {MAX_STATUS_LIMIT}.")
+
+    stmt = (
+        select(RequestModel)
+        .where(
+            RequestModel.request_class == RequestClass.event,
+            RequestModel.status == RequestStatus.queued,
+            RequestModel.calendar_uid.is_(None),
+            RequestModel.starts_at.is_not(None),
+        )
+        .order_by(RequestModel.starts_at)
+        .limit(limit)
+    )
+    rows = list(db.scalars(stmt))
+
+    return {
+        "items": [
+            {
+                "public_number": row.public_number,
+                "dedupe_key": row.dedupe_key,
+                "title": row.title,
+                "location": row.location,
+                "starts_at": _iso_z(row.starts_at),
+                "ends_at": _iso_z(row.ends_at),
+            }
+            for row in rows
+        ],
+        "count": len(rows),
+    }
+
+
+@router.post("/intake/events/{public_number}/written")
+@limiter.limit(_settings.intake_rate_limit)
+async def intake_event_written(
+    request: Request,
+    public_number: str,
+    db: Session = Depends(get_db),
+):
+    """Records the calendar UID for an event the sweep has just created.
+
+    Idempotent in the only way that matters: a request that already has a
+    UID is reported as `already_written` and is NOT overwritten. If the
+    sweep crashes between creating the event and reporting it, the retry
+    creates a second calendar event and this call refuses it — which
+    leaves a visible duplicate on the calendar rather than a silently
+    orphaned one that nothing can ever delete. The duplicate's UID is
+    returned so it can be cleaned up.
+    """
+    if not _token_ok(request):
+        return _not_found()
+
+    try:
+        payload = EventWritten.model_validate(await request.json())
+    except ValidationError as exc:
+        return _json_error(422, exc.errors()[0].get("msg", "Invalid body."))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _json_error(422, "Body must be JSON.")
+
+    req = db.scalar(select(RequestModel).where(RequestModel.public_number == public_number))
+    if req is None:
+        return _not_found()
+    if req.request_class != RequestClass.event:
+        return _json_error(422, f"{public_number} is not an event.")
+
+    if req.calendar_uid is not None:
+        return {
+            "public_number": public_number,
+            "status": "already_written",
+            "calendar_uid": req.calendar_uid,
+            "rejected_uid": payload.calendar_uid,
+        }
+
+    req.calendar_uid = payload.calendar_uid
+    req.calendar_written_at = datetime.now(UTC)
+    db.commit()
+    return {
+        "public_number": public_number,
+        "status": "recorded",
+        "calendar_uid": req.calendar_uid,
     }

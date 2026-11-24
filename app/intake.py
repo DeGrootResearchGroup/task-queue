@@ -23,7 +23,7 @@ accepts and declines things, and needs no separate review interface.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
@@ -101,6 +101,9 @@ def create_request(
     requester_email: str | None = None,
     status: RequestStatus = RequestStatus.submitted,
     dedupe_key: str | None = None,
+    starts_at: datetime | None = None,
+    ends_at: datetime | None = None,
+    location: str | None = None,
 ) -> Request:
     """Creates a request at `status` (default `submitted`) and returns it.
 
@@ -125,6 +128,21 @@ def create_request(
     description = _require(description, "Description")
     if len(description) > MAX_DESCRIPTION_LEN:
         raise IntakeError(f"Description is too long (limit {MAX_DESCRIPTION_LEN} characters).")
+
+    if request_class == RequestClass.event:
+        if starts_at is None or ends_at is None:
+            raise IntakeError("An event needs both a start and an end.")
+        if ends_at <= starts_at:
+            raise IntakeError("An event must end after it starts.")
+        # The date column stays populated for an event too, so everything
+        # that already sorts and filters on it -- the dashboard, the
+        # archive, the .ics feed -- keeps working without knowing events
+        # exist. starts_at is the finer-grained truth, not a replacement.
+        if desired_completion_date is None:
+            desired_completion_date = starts_at.date()
+            desired_date_reason = desired_date_reason or "Date of the event itself."
+    elif starts_at is not None or ends_at is not None or location is not None:
+        raise IntakeError("A start, end or location applies only to an event.")
 
     if desired_date_reason and not desired_completion_date:
         raise IntakeError("A desired-date reason without a date has nothing to explain.")
@@ -160,6 +178,9 @@ def create_request(
         desired_completion_date=desired_completion_date,
         desired_date_reason=_bounded(desired_date_reason, MAX_REASON_LEN, "Desired date reason"),
         dedupe_key=dedupe_key,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        location=_bounded(location, 300, "Location"),
     )
     db.add(req)
     db.flush()

@@ -22,6 +22,30 @@ from app.db import Base
 class RequestClass(str, enum.Enum):
     quick = "quick"
     long = "long"
+    # Not work to be worked through -- a commitment at a fixed time. An
+    # accepted event is pushed to the Western Exchange calendar so it
+    # consumes availability for colleagues booking through Outlook; the
+    # .ics feed cannot do that, because a subscribed feed is never part of
+    # the Exchange mailbox that free/busy is read from.
+    #
+    # Events deliberately carry no queue_position. They are not ordered
+    # against Quick and Long Actions, because their time is already fixed
+    # and a prioritised list is for deciding what to do next.
+    event = "event"
+
+
+_CLASS_LABELS = {"quick": "Quick Action", "long": "Long Action", "event": "Event"}
+
+
+def class_label(request_class: "RequestClass") -> str:
+    """Display name for a request class.
+
+    Exists because the label was written as an inline
+    `"Quick Action" if ... == "quick" else "Long Action"` in four places,
+    every one of which silently called an Event a Long Action the moment
+    a third class existed.
+    """
+    return _CLASS_LABELS.get(request_class.value, request_class.value.title())
 
 
 class RequestSource(str, enum.Enum):
@@ -109,6 +133,29 @@ class Request(Base):
 
     desired_completion_date: Mapped[date | None] = mapped_column(Date, default=None)
     desired_date_reason: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # --- Events only ---------------------------------------------------
+    # A request carries a date and nothing finer, which is right for a
+    # deadline and not enough for an event. These are null for every other
+    # class.
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    location: Mapped[str | None] = mapped_column(String(300), default=None)
+
+    # The UID Calendar.app returns when the event is created. Stored
+    # because reconciliation needs it and searching for the event instead
+    # is not practical: `events of cal whose uid is ...` against the
+    # Exchange calendar takes over three minutes and needs an extended
+    # AppleEvent timeout to complete at all (measured 2026-11-24). A
+    # date-bounded window is no faster -- the cost is Calendar resolving
+    # the account, not the size of the range.
+    #
+    # Set only once the event is actually on the calendar, so it doubles
+    # as the write marker: accepted event + null uid == still to write.
+    calendar_uid: Mapped[str | None] = mapped_column(String(300), default=None)
+    calendar_written_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
 
     # Caller-supplied idempotency key for the HTTP intake endpoint, normally
     # the RFC message-id of the originating email. Unique, so a sweep that

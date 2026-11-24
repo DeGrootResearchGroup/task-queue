@@ -362,8 +362,32 @@ def _as_utc_naive(value: datetime) -> datetime:
 
 
 def _iso_z(value: datetime) -> str:
-    """Renders a stored timestamp as unambiguous UTC."""
+    """Renders a stored timestamp as unambiguous UTC.
+
+    Correct for `created_at` / `updated_at`, which the server writes in
+    UTC. **Wrong for an event's `starts_at` / `ends_at`** -- see
+    `_iso_floating`.
+    """
     return f"{value.isoformat()}Z"
+
+
+def _iso_floating(value: datetime) -> str:
+    """Renders an event time as a floating local time, with NO zone suffix.
+
+    An event's start is a wall-clock time in the place it happens: a
+    seminar at 3pm is at 3pm, and nothing about it is a UTC instant. The
+    caller posts a naive timestamp and SQLite stores it naive.
+
+    This used `_iso_z`, which stamped a `Z` on that naive value and so
+    claimed 3pm local was 3pm UTC. A client that believed the suffix and
+    converted to Eastern would have put the seminar in the calendar at
+    10am. Caught on the first real event, before anything was mis-booked,
+    because the write path reads the wall-clock fields and ignores the
+    zone.
+
+    Serving no suffix is the honest answer: the value means what it says.
+    """
+    return value.replace(tzinfo=None).isoformat()
 
 
 def _encode_cursor(row: RequestModel) -> str:
@@ -516,8 +540,8 @@ def intake_events_pending(
                 "dedupe_key": row.dedupe_key,
                 "title": row.title,
                 "location": row.location,
-                "starts_at": _iso_z(row.starts_at),
-                "ends_at": _iso_z(row.ends_at),
+                "starts_at": _iso_floating(row.starts_at),
+                "ends_at": _iso_floating(row.ends_at),
             }
             for row in rows
         ],

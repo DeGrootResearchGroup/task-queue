@@ -232,3 +232,29 @@ class TestRecordingTheUid:
             f"/intake/events/{req.public_number}/written", json={"calendar_uid": "X"}
         )
         assert resp.status_code == 404
+
+
+class TestEventTimesAreFloating:
+    """An event's time is a wall-clock time, not a UTC instant.
+
+    These served as `...T15:00:00Z` while being stored naive, so a client
+    that honoured the suffix would have booked a 3pm seminar at 10am.
+    """
+
+    def test_pending_times_carry_no_zone_suffix(self, client, db_session):
+        post(client, [event_item()])
+        req = db_session.scalar(
+            select(RequestModel).where(RequestModel.dedupe_key == "seminar@example.com")
+        )
+        state_machine.accept_and_queue(db_session, req)
+        db_session.commit()
+        row = client.get("/intake/events/pending", headers=auth()).json()["items"][0]
+        assert row["starts_at"] == "2026-11-30T15:00:00"
+        assert row["ends_at"] == "2026-11-30T16:00:00"
+        assert not row["starts_at"].endswith("Z")
+
+    def test_updated_at_still_carries_z(self, client):
+        """The audit timestamps really are UTC; only event times changed."""
+        post(client, [event_item()])
+        row = client.get("/intake/requests/status", headers=auth()).json()["items"][0]
+        assert row["updated_at"].endswith("Z")

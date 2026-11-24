@@ -11,7 +11,6 @@ be offered on a request with no requester, because `needs_information` can
 only be left from the public tracking page.
 """
 
-import re
 from datetime import date, timedelta
 from unittest.mock import patch
 

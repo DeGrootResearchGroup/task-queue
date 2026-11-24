@@ -36,7 +36,7 @@ a copied database yields nothing that can be presented here.
 import base64
 import binascii
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -48,7 +48,14 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.intake import IntakeError, Link, create_request
-from app.models import Request as RequestModel, RequestClass, RequestSource, RequestStatus
+from app.models import (
+    EventType,
+    Request as RequestModel,
+    RequestClass,
+    RequestEvent,
+    RequestSource,
+    RequestStatus,
+)
 from app.rate_limit import limiter
 from app.security import intake_token_matches
 from app.schemas import (
@@ -181,6 +188,13 @@ def _first_error(exc: ValidationError) -> str:
     return f"{location}: {error['msg']}"
 
 
+def _jsonable(value):
+    """Dates and datetimes into the audit metadata, which is a JSON column."""
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    return value
+
+
 def _found(req: RequestModel, index: int, status: str) -> dict:
     return {
         "index": index,
@@ -189,6 +203,43 @@ def _found(req: RequestModel, index: int, status: str) -> dict:
         "public_number": req.public_number,
         "dedupe_key": req.dedupe_key,
     }
+
+
+# How far back to look for an identical title when deciding whether an
+# item is the same announcement arriving twice.
+DOUBLE_SEND_WINDOW = timedelta(hours=36)
+
+
+def _possible_double_send(db: Session, item: IntakeItem) -> str | None:
+    """Returns the public number of a recent request with the same title, if any.
+
+    `dedupe_key` does NOT cover this case and cannot. It stops one message
+    being captured twice; it does nothing about one announcement being
+    SENT twice, because two real copies are two messages with two distinct
+    RFC message-ids and therefore two distinct keys. Observed live: the
+    Dean's "WE Monthly Coffee Hour" arrived twice, four minutes apart, both
+    copies genuine.
+
+    This only reports. It does not refuse, and that asymmetry is
+    deliberate: a duplicate request costs one click to cancel, while a
+    wrongly-blocked capture is an obligation that silently never arrives.
+    Titles also legitimately repeat -- every month's PCard reconciliation
+    carries the same one -- which is what the time window is for, and why
+    a stricter rule here would start eating real work.
+    """
+    if not item.title.strip():
+        return None
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - DOUBLE_SEND_WINDOW
+    twin = db.scalar(
+        select(RequestModel)
+        .where(
+            RequestModel.title == item.title,
+            RequestModel.source == item.source,
+            RequestModel.created_at >= cutoff,
+        )
+        .order_by(RequestModel.created_at.desc())
+    )
+    return twin.public_number if twin is not None else None
 
 
 def _store_item(db: Session, item: IntakeItem, index: int) -> dict:
@@ -201,6 +252,9 @@ def _store_item(db: Session, item: IntakeItem, index: int) -> dict:
             # what became of it: if the Owner already declined or cancelled
             # this item, a later sweep must not put it back on his queue.
             return _found(existing, index, "duplicate")
+
+    # Checked before the insert, so the item does not match itself.
+    twin = _possible_double_send(db, item)
 
     try:
         # Savepoint, so a failure here rolls back this item alone and leaves
@@ -224,6 +278,8 @@ def _store_item(db: Session, item: IntakeItem, index: int) -> dict:
             # Read now, while the instance is attached and unexpired: the
             # commit at the end of the batch expires every attribute.
             result = _found(req, index, "created")
+            if twin is not None:
+                result["possible_double_send"] = twin
     except IntakeError as exc:
         return {"index": index, "status": "rejected", "error": str(exc)}
     except IntegrityError:
@@ -512,4 +568,119 @@ async def intake_event_written(
         "public_number": public_number,
         "status": "recorded",
         "calendar_uid": req.calendar_uid,
+    }
+
+
+class IntakeCorrection(BaseModel):
+    """A correction to an already-captured item, keyed on its dedupe_key.
+
+    Only the fields a re-read of the originating email can legitimately
+    revise. Title and description are here because a capture made from a
+    subject line is exactly the one most likely to be wrong, and status,
+    class and queue position are NOT, because those are the Owner's
+    decisions and nothing automated should be able to reach them.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=MAX_TITLE_LEN)
+    description: str | None = Field(default=None, min_length=1, max_length=MAX_DESCRIPTION_LEN)
+    additional_context: str | None = Field(default=None, max_length=MAX_CONTEXT_LEN)
+    desired_completion_date: date | None = None
+    desired_date_reason: str | None = Field(default=None, max_length=MAX_REASON_LEN)
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    location: str | None = Field(default=None, max_length=300)
+    note: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/intake/requests/correct")
+@limiter.limit(_settings.intake_rate_limit)
+async def intake_correct(
+    request: Request,
+    dedupe_key: str = "",
+    db: Session = Depends(get_db),
+):
+    """Revises a captured request in place, identified by `dedupe_key`.
+
+    Exists because capture was one-way and that turned out to be a real
+    gap, not a theoretical one. An item captured with no date, or with a
+    date read from a subject line and later contradicted by the body, had
+    no route back: intake only created, `dedupe_key` is permanent, and a
+    second POST reports `duplicate` by design. The only fix was the Owner
+    editing it by hand. Live example: a Coffee Hour captured with no date
+    whose real session was the following day.
+
+    Deliberately narrow in three ways.
+
+    It cannot touch `status`, `request_class`, `queue_position` or any of
+    the decision fields. Those are the Owner's, and a token that could
+    move them could accept work on his behalf.
+
+    It refuses a request that is already closed. Re-dating something he
+    has declined or completed would quietly reopen a decision he has
+    made; the capture path refuses the same thing for the same reason.
+
+    It requires a `note` saying what prompted the change, recorded on the
+    request's own timeline. A silent correction is indistinguishable from
+    a bug, and this runs unattended.
+    """
+    if not _token_ok(request):
+        return _not_found()
+    if not dedupe_key:
+        return _json_error(422, "dedupe_key is required.")
+
+    try:
+        payload = IntakeCorrection.model_validate(await request.json())
+    except ValidationError as exc:
+        return _json_error(422, exc.errors()[0].get("msg", "Invalid body."))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _json_error(422, "Body must be JSON.")
+
+    req = db.scalar(select(RequestModel).where(RequestModel.dedupe_key == dedupe_key))
+    if req is None:
+        return _not_found()
+    if DISPOSITIONS[req.status] == "closed":
+        return _json_error(
+            409,
+            f"{req.public_number} is {req.status.value}; a closed request is not corrected.",
+        )
+
+    fields = payload.model_dump(exclude_unset=True, exclude={"note"})
+    if not fields:
+        return _json_error(422, "Nothing to change.")
+
+    changed = {}
+    for name, value in fields.items():
+        before = getattr(req, name)
+        if before == value:
+            continue
+        setattr(req, name, value)
+        changed[name] = {"from": _jsonable(before), "to": _jsonable(value)}
+
+    if not changed:
+        return {"public_number": req.public_number, "status": "unchanged"}
+
+    # Same rule the capture path enforces: a date must carry its reason,
+    # since the recorded date is often computed from a different stated one.
+    if req.desired_completion_date and not (req.desired_date_reason or "").strip():
+        db.rollback()
+        return _json_error(422, "A desired completion date needs a reason recording how it was set.")
+    if req.request_class == RequestClass.event and req.starts_at and req.ends_at:
+        if req.ends_at <= req.starts_at:
+            db.rollback()
+            return _json_error(422, "An event must end after it starts.")
+
+    db.add(
+        RequestEvent(
+            request_id=req.id,
+            event_type=EventType.information_added,
+            event_metadata={"source": "intake_correction", "note": payload.note, "changed": changed},
+        )
+    )
+    db.commit()
+    return {
+        "public_number": req.public_number,
+        "status": "corrected",
+        "changed": sorted(changed),
     }

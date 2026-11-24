@@ -162,9 +162,22 @@ class TestValidation:
         with pytest.raises(IntakeError):
             _create(db_session, desired_completion_date=date(2026, 12, 1))
 
-    def test_rejects_a_reason_with_no_date(self, db_session):
-        with pytest.raises(IntakeError):
-            _create(db_session, desired_date_reason="Because.")
+    def test_accepts_a_reason_with_no_date(self, db_session):
+        """Reversed 2026-11-24. This used to assert the opposite.
+
+        "A reason without a date has nothing to explain" reads well and
+        was wrong: a body that states an obligation but no cutoff is the
+        ordinary case in this mail, and recording "no stated cutoff" is
+        the honest answer rules/capture-gate.md asks the sweep for. The
+        old rule forbade it, so four real captures were rejected and the
+        explanation got smuggled into additional_context instead.
+
+        The implication that matters still holds and is tested directly
+        above: a DATE without a reason is refused.
+        """
+        req = _create(db_session, desired_date_reason="No stated cutoff in the body.")
+        assert req.desired_completion_date is None
+        assert req.desired_date_reason == "No stated cutoff in the body."
 
     def test_rejects_a_link_with_no_url(self, db_session):
         with pytest.raises(IntakeError):

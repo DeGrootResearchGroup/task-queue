@@ -144,8 +144,19 @@ def create_request(
     elif starts_at is not None or ends_at is not None or location is not None:
         raise IntakeError("A start, end or location applies only to an event.")
 
-    if desired_date_reason and not desired_completion_date:
-        raise IntakeError("A desired-date reason without a date has nothing to explain.")
+    # A reason with no date is allowed, and is the honest result when a
+    # body states an obligation but no cutoff. The rule used to be the
+    # opposite -- "a reason without a date has nothing to explain" -- which
+    # read well and was wrong: it forbade exactly what rules/capture-gate.md
+    # tells the sweep to record, so four real captures were rejected before
+    # anyone noticed the two documents disagreed. The workaround was to
+    # smuggle the explanation into additional_context behind a shouty
+    # "WHY THERE IS NO DATE:" prefix, which put it where nothing reads it.
+    #
+    # The reverse implication still holds and is the one that matters: a
+    # DATE without a reason is forbidden, because a recorded date is often
+    # computed -- backed off from the stated deadline -- and the reason is
+    # the only place the stated one survives.
     if desired_completion_date and not (desired_date_reason or "").strip():
         # Mirrors the public form's rule, and matters more here: the recorded
         # date is often a computed one, backed off from the stated deadline,

@@ -243,3 +243,70 @@ class TestScriptCli:
         )
         assert exit_code == 1
         assert "reason" in capsys.readouterr().err
+
+
+class TestDecliningACapturedRequest:
+    """Declining is an expected outcome of triage, not an exception.
+
+    A captured request has nobody on the other end, so requiring a written
+    justification is friction on a path that has to stay fast. The rule
+    keys on `requester_email` — whether there is an audience — rather than
+    on `source`, which would give the same answer today for the wrong
+    reason.
+    """
+
+    def test_no_reason_is_needed(self, db_session):
+        req = _create(db_session)
+        decline(db_session, req)
+        assert req.status == RequestStatus.declined
+        assert req.decline_reason is None
+
+    def test_it_matches_cancel_rather_than_contradicting_it(self, db_session):
+        from app.state_machine import cancel
+
+        declined = _create(db_session)
+        cancelled = _create(db_session, title="Another item")
+        decline(db_session, declined)
+        cancel(db_session, cancelled)
+        # Two closing paths on the same dashboard, same rule about reasons.
+        assert (declined.decline_reason, cancelled.cancel_reason) == (None, None)
+
+    def test_the_form_asks_for_an_optional_reason(self, client, db_session):
+        from tests.conftest import login
+
+        req = _create(db_session)
+        login(client)
+        page = client.get(f"/requests/{req.id}").text
+        assert "Reason (optional)" in page
+        assert "Reason (shown to the requester)" not in page
+
+    def test_the_route_accepts_an_empty_reason(self, client, db_session):
+        import re
+
+        from tests.conftest import login
+
+        req = _create(db_session)
+        login(client)
+        csrf = re.search(
+            r'name="csrf_token" value="([^"]*)"', client.get(f"/requests/{req.id}").text
+        ).group(1)
+        resp = client.post(
+            f"/requests/{req.id}/decline",
+            data={"csrf_token": csrf, "reason": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        db_session.expire_all()
+        assert db_session.scalar(select(RequestModel)).status == RequestStatus.declined
+
+    def test_declining_a_captured_request_mails_nobody(self, client, db_session, monkeypatch):
+        from app.config import get_settings
+
+        settings = get_settings()
+        monkeypatch.setattr(settings, "smtp_username", "bot@example.com")
+        monkeypatch.setattr(settings, "smtp_password", "app-password")
+
+        req = _create(db_session)
+        with patch("app.email.send_email") as mock_send:
+            decline(db_session, req)
+        assert mock_send.call_count == 0

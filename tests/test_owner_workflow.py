@@ -93,6 +93,34 @@ def test_decline_requires_reason_and_shows_on_tracking_page(client):
     assert "Out of scope for me" in tracking.text
 
 
+def test_declining_a_form_request_with_no_reason_is_refused(client):
+    # The other half of the rule: a form submission has a requester who
+    # will be sent the reason, so an empty one is rejected. The captured
+    # case, where there is nobody to tell, is in tests/test_intake.py.
+    login(client)
+    submit_request(client, title="Needs a reason")
+    req_id = _request_id_from_dashboard(client, "Needs a reason")
+
+    detail = client.get(f"/requests/{req_id}")
+    csrf = _csrf_from(detail.text)
+    resp = client.post(
+        f"/requests/{req_id}/decline",
+        data={"csrf_token": csrf, "reason": "   "},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 409
+    assert "A decline reason is required." in resp.text
+    assert "status-submitted" in client.get(f"/requests/{req_id}").text
+
+
+def test_the_decline_form_marks_the_reason_required_for_a_form_request(client):
+    login(client)
+    submit_request(client, title="Has a requester")
+    req_id = _request_id_from_dashboard(client, "Has a requester")
+    page = client.get(f"/requests/{req_id}").text
+    assert "Reason (shown to the requester)" in page
+
+
 def _queue_order(client) -> list[str]:
     """Titles in the dashboard's accepted queue, in the order rendered.
 

@@ -88,8 +88,17 @@
                 <form method="post" action="/requests/{{ req.id }}/decline" class="card card-body mt-2">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                   <div class="mb-2">
-                    <label for="reason" class="form-label">Reason (shown to the requester)</label>
-                    <textarea class="form-control" id="reason" name="reason" rows="2" required></textarea>
+                    {#- Required only when somebody will be sent it. For one of
+                        the Owner's own captured items there is no audience, so
+                        asking for a justification is friction on a path that
+                        has to stay fast — same rule as Cancel below. The
+                        server enforces this too; the attribute is only the
+                        browser-side half. -#}
+                    <label for="reason" class="form-label">
+                      {{ 'Reason (shown to the requester)' if req.requester_email else 'Reason (optional)' }}
+                    </label>
+                    <textarea class="form-control" id="reason" name="reason" rows="2"
+                              {{ 'required' if req.requester_email }}></textarea>
                   </div>
                   <button type="submit" class="btn btn-danger btn-sm">Confirm Decline</button>
                 </form>

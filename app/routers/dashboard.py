@@ -218,10 +218,13 @@ def decline_request(
     request_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    reason: str = Form(...),
+    reason: str = Form(""),
     db: Session = Depends(get_db),
     settings_row: AppSettings = Depends(get_app_settings),
 ):
+    # Not Form(...): whether a reason is required depends on the request,
+    # not on the route. state_machine.decline enforces it where it applies
+    # — when there is a requester who will be sent it.
     req = _get_request_or_404(db, request_id)
     decline(db, req, reason)
     commit_and_refresh(db, req, settings_row)

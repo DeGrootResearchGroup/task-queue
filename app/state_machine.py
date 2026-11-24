@@ -86,15 +86,36 @@ def accept_and_queue(db: Session, req: Request) -> None:
     _log(db, req, EventType.accepted)
 
 
-def decline(db: Session, req: Request, reason: str) -> None:
+def decline(db: Session, req: Request, reason: str | None = None) -> None:
+    """Refuses a submitted request.
+
+    The reason is required only when there is a requester to receive it.
+    It goes into the notification they get, and declining somebody's
+    request with no explanation would be rude — but an `email` or `manual`
+    request is one of the Owner's own, with nobody on the other end, and
+    demanding a justification nobody will read is pure friction on a path
+    that has to stay fast. Declining is an expected outcome of triage, not
+    an exception.
+
+    The predicate is `requester_email`, not `source`: that is exactly the
+    condition under which the reason has an audience. Keying on
+    `source == form` would give the same answer today, for the wrong
+    reason, and would be wrong the first time something is captured on
+    somebody else's behalf.
+
+    A reason given is always stored, audience or not — it is worth having
+    in the archive either way. Compare `cancel`, where it is always
+    optional.
+    """
     if req.status != RequestStatus.submitted:
         raise TransitionError("Only a Submitted request can be declined.")
-    if not reason or not reason.strip():
+    reason = reason.strip() if reason else ""
+    if not reason and req.requester_email:
         raise TransitionError("A decline reason is required.")
     req.status = RequestStatus.declined
-    req.decline_reason = reason.strip()
+    req.decline_reason = reason or None
     req.declined_at = _now()
-    _log(db, req, EventType.declined, {"reason": reason.strip()})
+    _log(db, req, EventType.declined, {"reason": reason} if reason else None)
 
 
 def start_work(db: Session, req: Request) -> None:

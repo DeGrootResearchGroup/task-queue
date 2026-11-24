@@ -350,6 +350,15 @@ for a request can disappear at any point before it is finished. The reason is
 optional — "no transactions this month" is a routine non-event, and demanding a
 sentence about it every cycle is how an honest state stops being used.
 
+**Decline's reason follows the same rule, conditionally.** It is required only
+when the request has a `requester_email`: that is who the reason is written for,
+and it goes into the notification they receive. One of your own captured items
+has nobody on the other end, so the reason is optional there, as it is for
+Cancel — declining is an expected outcome of triage, and a justification nobody
+will read is friction on a path that needs to stay fast. A reason given is
+always stored either way. The condition is the presence of a requester, not the
+`source`: the two agree today, but only the first is the actual reason.
+
 `cancelled` filters separately from `done` in the Archive, which is the point.
 The requester of a `form` request is emailed and their tracking page says the
 request was not completed and not declined; cancelling one of your own

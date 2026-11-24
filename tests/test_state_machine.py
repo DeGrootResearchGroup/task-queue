@@ -82,10 +82,45 @@ class TestDecline:
         assert req.decline_reason == "Not enough context"
         assert req.declined_at is not None
 
-    def test_requires_reason(self, db_session):
+    def test_requires_a_reason_when_there_is_a_requester_to_send_it_to(self, db_session):
+        # make_request() carries a requester_email, so the reason has an
+        # audience and declining without one would be rude.
         req = add(db_session, make_request())
         with pytest.raises(TransitionError):
             decline(db_session, req, "   ")
+
+    def test_allows_no_reason_when_there_is_nobody_to_tell(self, db_session):
+        # One of the Owner's own captured items: nobody reads the reason,
+        # so demanding one is friction on the triage path.
+        req = add(db_session, make_request(requester_name=None, requester_email=None))
+        decline(db_session, req, "   ")
+        assert req.status == RequestStatus.declined
+        assert req.decline_reason is None
+        assert req.declined_at is not None
+
+    def test_allows_an_omitted_reason_entirely(self, db_session):
+        req = add(db_session, make_request(requester_name=None, requester_email=None))
+        decline(db_session, req)
+        assert req.status == RequestStatus.declined
+
+    def test_stores_a_reason_given_without_an_audience(self, db_session):
+        # Worth keeping in the archive either way.
+        req = add(db_session, make_request(requester_name=None, requester_email=None))
+        decline(db_session, req, "  Already handled by the department.  ")
+        assert req.decline_reason == "Already handled by the department."
+
+    def test_the_rule_keys_on_the_requester_not_the_source(self, db_session):
+        # An email-sourced request that does name somebody still needs a
+        # reason: the predicate is "is there an audience", not "where did
+        # this come from".
+        from app.models import RequestSource
+
+        req = add(
+            db_session,
+            make_request(source=RequestSource.email, requester_email="colleague@example.com"),
+        )
+        with pytest.raises(TransitionError):
+            decline(db_session, req, "")
 
 
 class TestStartAndComplete:

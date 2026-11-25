@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 from app.db import commit_and_refresh
 from app.deps import get_app_settings, get_db, get_or_create_csrf_token, require_owner, verify_csrf
 from app.flash import flash
-from app.models import AppSettings, Request as RequestModel, RequestClass, RequestSource, RequestStatus
+from app.models import (
+    AppSettings,
+    EventType,
+    Request as RequestModel,
+    RequestClass,
+    RequestEvent,
+    RequestSource,
+    RequestStatus,
+)
 from app.notifications import (
     notify_requester_accepted,
     notify_requester_blocked,
@@ -32,6 +40,7 @@ from app.state_machine import (
     start_work,
     unblock,
 )
+from app.schemas import MAX_REASON_LEN
 from app.templating import render
 from app.utils import urgency_level
 
@@ -264,9 +273,113 @@ def request_detail(
             # every detail view, not just while this one is submitted, so the
             # button is already there on the page an action redirects back to.
             "next_review_id": _next_submitted_id(db, req),
+            # Whether to offer the date form at all. Decided here rather
+            # than by listing statuses in the template, so the rule the
+            # route enforces and the one the page shows cannot drift.
+            "can_edit_date": req.status in OPEN_STATUSES,
             "others_awaiting_review": _others_awaiting_review(db, req),
         },
     )
+
+
+@router.post("/requests/{request_id}/date", dependencies=[Depends(verify_csrf)])
+def set_date(
+    request_id: int,
+    request: Request,
+    desired_completion_date: str = Form(""),
+    desired_date_reason: str = Form(""),
+    db: Session = Depends(get_db),
+    settings_row: AppSettings = Depends(get_app_settings),
+):
+    """Sets, changes or clears the desired completion date by hand.
+
+    The capture gate reads a date out of the mail and routinely does not
+    find one: it is in an attachment, or in a sentence the gate is
+    deliberately too narrow to count. `/intake/requests/correct` can
+    revise a capture from the sweep's side, but only while that mail is
+    still in front of it -- noticing days later, or being told the date in
+    a corridor, left no route in at all short of editing the database.
+
+    Open requests only, on the same reasoning the correction endpoint
+    refuses a closed one: re-dating something already declined, done or
+    cancelled reopens a decision rather than records a fact.
+    `OPEN_STATUSES` is exactly that set.
+
+    Not a state transition, so it is not in `state_machine`: the status is
+    untouched, and a request with no date is in no different a state from
+    one with a date. Nothing is sent to the requester either -- the date
+    and its reason are both already on their tracking page, so the change
+    shows up there without an email claiming more significance than a
+    correction has.
+    """
+    req = _get_request_or_404(db, request_id)
+    if req.status not in OPEN_STATUSES:
+        flash(
+            request,
+            f"{req.public_number} is {req.status.value}; a closed request is not re-dated.",
+            "error",
+        )
+        return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
+
+    raw = desired_completion_date.strip()
+    new_date: date | None = None
+    if raw:
+        try:
+            new_date = date.fromisoformat(raw)
+        except ValueError:
+            # Only reachable from a hand-made POST; the browser's own date
+            # input cannot submit this.
+            flash(request, "That date could not be read.", "error")
+            return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
+
+    reason = desired_date_reason.strip()
+    if len(reason) > MAX_REASON_LEN:
+        flash(request, "That reason is too long.", "error")
+        return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
+    # The same rule the public form, the capture path and the correction
+    # endpoint all enforce: a recorded date carries how it was arrived at,
+    # because it is so often not the date anybody stated -- an effective
+    # date computed back from a stated one, or a working day chosen next to
+    # a weekend deadline.
+    if new_date is not None and not reason:
+        flash(request, "A date needs a reason recording how it was set.", "error")
+        return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
+    # Clearing the date clears the reason with it. A reason left behind
+    # explains a date that is no longer there, and would then be shown on
+    # the tracking page under no date at all.
+    if new_date is None:
+        reason = ""
+
+    was_date = req.desired_completion_date
+    was_reason = req.desired_date_reason or ""
+    if new_date == was_date and reason == was_reason:
+        flash(request, "The date is unchanged.", "info")
+        return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
+
+    req.desired_completion_date = new_date
+    req.desired_date_reason = reason or None
+    # Recorded for the same reason the correction endpoint requires a note:
+    # a date that changes with nothing on the timeline is indistinguishable
+    # from a bug, and this one feeds the calendar feed and the urgency
+    # colours on the dashboard.
+    db.add(
+        RequestEvent(
+            request_id=req.id,
+            event_type=EventType.date_changed,
+            event_metadata={
+                "source": "owner_edit",
+                "from": was_date.isoformat() if was_date else None,
+                "to": new_date.isoformat() if new_date else None,
+                "reason": reason or None,
+            },
+        )
+    )
+    commit_and_refresh(db, req, settings_row)
+    if new_date is None:
+        flash(request, f"Date cleared on {req.title}.", "success")
+    else:
+        flash(request, f"Date set to {new_date.strftime('%B %-d, %Y')} on {req.title}.", "success")
+    return RedirectResponse(url=f"/requests/{request_id}", status_code=303)
 
 
 @router.post("/requests/{request_id}/accept", dependencies=[Depends(verify_csrf)])

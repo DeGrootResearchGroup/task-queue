@@ -106,6 +106,13 @@ class EventType(str, enum.Enum):
     reordered = "reordered"
     blocked = "blocked"
     unblocked = "unblocked"
+    # The Owner set, changed or cleared `desired_completion_date` by hand.
+    # Distinct from `information_added`, which is what the intake correction
+    # endpoint records: both revise a capture, but one is him deciding a date
+    # the mail never stated and the other is the sweep re-reading the mail.
+    # Needs no migration, for the reason given in 8282938591ea: SQLAlchemy
+    # renders an Enum on SQLite as a plain VARCHAR with no CHECK constraint.
+    date_changed = "date_changed"
 
 
 class Request(Base):

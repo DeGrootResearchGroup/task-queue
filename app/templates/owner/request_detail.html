@@ -84,13 +84,49 @@
             <div class="text-muted small fw-semibold text-uppercase mb-1">Submitted</div>
             <div>{{ req.created_at.strftime('%B %-d, %Y') }}</div>
           </div>
-          {% if req.desired_completion_date %}
+          {#- Shown even with no date, where it used to be left out entirely:
+              a missing date is the thing most often needing fixing here, and
+              a block that isn't on the page can't offer the way to fix it. -#}
           <div class="mb-3">
             <div class="text-muted small fw-semibold text-uppercase mb-1">Desired completion date</div>
-            <div>{{ m.urgency_badge(urgency, req.desired_completion_date.strftime('%b %-d, %Y'), days_text) }}</div>
-            {% if req.desired_date_reason %}<div class="form-text mt-1">{{ req.desired_date_reason }}</div>{% endif %}
+            {% if req.desired_completion_date %}
+              <div>{{ m.urgency_badge(urgency, req.desired_completion_date.strftime('%b %-d, %Y'), days_text) }}</div>
+              {% if req.desired_date_reason %}<div class="form-text mt-1">{{ req.desired_date_reason }}</div>{% endif %}
+            {% else %}
+              <div class="text-muted">No date</div>
+            {% endif %}
+            {% if can_edit_date %}
+              <details class="mt-2">
+                <summary class="btn btn-outline-secondary btn-sm">
+                  {{ 'Change date' if req.desired_completion_date else 'Set a date' }}
+                </summary>
+                <form method="post" action="/requests/{{ req.id }}/date" class="card card-body mt-2">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <p class="small text-muted">
+                    For a deadline the capture missed, or one that turns out to be wrong. Changing it
+                    moves this request's place in the calendar feed and its urgency on the dashboard.
+                  </p>
+                  <div class="mb-2">
+                    <label for="desired_completion_date" class="form-label">Date</label>
+                    <input type="date" class="form-control" id="desired_completion_date"
+                           name="desired_completion_date"
+                           value="{{ req.desired_completion_date.isoformat() if req.desired_completion_date else '' }}">
+                    <div class="form-text">Leave empty to clear the date, and the reason with it.</div>
+                  </div>
+                  <div class="mb-2">
+                    {#- Required alongside a date, the same rule the public form and the
+                        capture path enforce; the server enforces it too, this attribute
+                        is only the browser-side half. -#}
+                    <label for="desired_date_reason" class="form-label">How was this date arrived at?</label>
+                    <textarea class="form-control" id="desired_date_reason" name="desired_date_reason" rows="2"
+                              placeholder="e.g. Stated &quot;end of the month&quot; in the attached PDF; set to the last working day."
+                              >{{ req.desired_date_reason or '' }}</textarea>
+                  </div>
+                  <div><button type="submit" class="btn btn-primary btn-sm">Save date</button></div>
+                </form>
+              </details>
+            {% endif %}
           </div>
-          {% endif %}
           <div class="mb-3">
             <div class="text-muted small fw-semibold text-uppercase mb-1">What's needed</div>
             <div style="white-space: pre-wrap;">{{ req.description }}</div>

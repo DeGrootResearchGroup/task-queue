@@ -368,6 +368,60 @@ Cancelling an occurrence does not touch its standing commitment: the series
 stays active, the generator does not re-create the cancelled occurrence, and the
 next cycle is produced as normal.
 
+## Fixing a date
+
+**Set a date** / **Change date**, in the *Desired completion date* block on any
+active request's page, writes `desired_completion_date` by hand. The capture
+gate finds no date far more often than it finds a wrong one — the deadline is in
+an attachment, or in a sentence the gate is deliberately too narrow to count —
+and `/intake/requests/correct` only helps while the sweep still has that mail in
+front of it. Being told a date in a corridor, or noticing one a week later, had
+no route in at all.
+
+The rules are the ones every other write path already enforces:
+
+- **A date carries a reason.** Required alongside the date, because the recorded
+  date is so often not the one anybody stated: an effective date computed back
+  from a stated one, or a working day chosen next to a weekend deadline. The
+  reason shows under the date here and on the requester's tracking page.
+- **Clearing the date clears the reason.** A reason left behind explains a date
+  that is no longer there.
+- **Active requests only**, the same refusal `/intake/requests/correct` makes for
+  the same reason: re-dating something already `done`, `declined`, `cancelled` or
+  `withdrawn` reopens a decision rather than records a fact.
+- **It is not a transition.** The status is untouched, so this is not in
+  `state_machine`, and a request awaiting review is still awaiting review after
+  being dated.
+- **Nothing is emailed.** The date and its reason are already on the tracking
+  page, so a `form` requester sees the change without a mail claiming more
+  significance than a correction has.
+
+Each change is recorded on the request's timeline as `date_changed`, carrying
+the old date, the new one and the reason — a date that moved with nothing on the
+timeline is indistinguishable from a bug, and this field drives both the
+calendar feed and the dashboard's urgency colours.
+
+Event start and end times are **not** editable here. An accepted event has been
+written to Exchange and carries its `calendar_uid`, and the sweep writes each
+event once; a changed time would need a re-write path to reach Outlook rather
+than leaving a stale entry behind. `/intake/requests/correct` remains the way in
+for those.
+
+## Walking the review queue
+
+A request's page links straight to the next one awaiting review, so a triage
+pass does not go back through the dashboard between decisions. After Accept,
+Decline, Request Information or Put on hold — all of which land back on the same
+page — the link reads **Next awaiting review**; before the decision the same
+link is a **Skip**, styled quietly so it does not compete with Accept. The badge
+counts the *other* requests awaiting review, so it reads the same before and
+after a decision.
+
+It follows the dashboard's own Awaiting review order (`created_at`, `id`
+breaking the ties the twice-daily sweep produces), wraps from the last item back
+to the oldest still submitted so a Skip does not dead-end, and disappears
+entirely once nothing else is waiting.
+
 ## Tests
 
 ```bash
@@ -382,6 +436,11 @@ After changing `app/models.py`, generate a migration:
 uv run alembic revision --autogenerate -m "describe the change"
 uv run alembic upgrade head
 ```
+
+A new member of `RequestStatus` or `EventType` is the exception and needs no
+DDL: SQLAlchemy renders an `Enum` on SQLite as a plain `VARCHAR` with no `CHECK`
+constraint, so the value is simply storable. See the note in
+`8282938591ea_add_cancelled_status.py`.
 
 ## Deployment
 

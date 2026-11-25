@@ -422,6 +422,23 @@ breaking the ties the twice-daily sweep produces), wraps from the last item back
 to the oldest still submitted so a Skip does not dead-end, and disappears
 entirely once nothing else is waiting.
 
+## Reading the Quick Action queue
+
+The dashboard's Quick Actions card lists eight at a time, with a pager
+underneath reading **Showing 1–8 of 20** and **Page 1 of 3**. The count beside
+the heading, and the one in the summary bar at the top, are always the whole
+queue — the card shows a page of it. Before the pager existed the card simply
+stopped at eight, so anything behind them could be reached only by starting a
+Quick Action session, which is the working view rather than the reading one.
+
+Pages are `/dashboard?quick_page=2`, anchored at `#quick-actions` so a click
+lands on the list it moved rather than at the top of the dashboard, and they
+carry `?source=` along so a filtered view pages through that filter's queue on
+its own count. Switching the source filter starts again at the first page. A
+page number that is unreadable, zero or negative lands on the first page, and
+one past the end lands on the last, so a bookmarked page 4 still shows rows
+after the queue has been worked down.
+
 ## Tests
 
 ```bash

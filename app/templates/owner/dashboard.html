@@ -96,7 +96,11 @@
     {% endif %}
   </div>
 
-  <div class="card section-card shadow-sm mb-4">
+  {#- Quick Actions are listed a page at a time: the card is for reading the
+      queue over, while /quick-session is for working it. Without the pager
+      underneath, anything past the first page was invisible here and could
+      only be reached by starting a session. -#}
+  <div class="card section-card shadow-sm mb-4" id="quick-actions">
     <div class="card-header">
       <h2 class="h6 mb-0 text-uppercase">Quick Actions</h2>
       <span class="text-muted small">{{ quick_pending_count }}</span>
@@ -115,6 +119,24 @@
           </a>
         {% endfor %}
       </div>
+      {% if quick_page_count > 1 %}
+        <div class="card-footer d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <span class="text-muted small">Showing {{ quick_first }}&ndash;{{ quick_last }} of {{ quick_pending_count }}</span>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Quick Action pages">
+            {% if quick_prev_url %}
+              <a class="btn btn-outline-secondary" href="{{ quick_prev_url }}" rel="prev">&larr; Previous</a>
+            {% else %}
+              <span class="btn btn-outline-secondary disabled" aria-disabled="true">&larr; Previous</span>
+            {% endif %}
+            <span class="btn btn-outline-secondary disabled" aria-disabled="true">Page {{ quick_page }} of {{ quick_page_count }}</span>
+            {% if quick_next_url %}
+              <a class="btn btn-outline-secondary" href="{{ quick_next_url }}" rel="next">Next &rarr;</a>
+            {% else %}
+              <span class="btn btn-outline-secondary disabled" aria-disabled="true">Next &rarr;</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
     {% else %}
       <p class="empty-state">No Quick Actions waiting{{ ' from this source' if active_source else '' }}.</p>
     {% endif %}

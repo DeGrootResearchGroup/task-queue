@@ -58,6 +58,13 @@ OPEN_STATUSES = (
 )
 
 
+# How many Quick Actions one page of the dashboard's Quick Actions card
+# shows. The card is a reading list, not the working view — the session at
+# /quick-session is that — so the page stays short enough to scan while the
+# pager underneath reaches the rest.
+QUICK_PAGE_SIZE = 8
+
+
 def _get_request_or_404(db: Session, request_id: int) -> RequestModel:
     req = db.get(RequestModel, request_id)
     if req is None:
@@ -112,6 +119,34 @@ def _next_submitted_id(db: Session, req: RequestModel) -> int | None:
     return first.id if first is not None else None
 
 
+def _quick_page(page: str, total: int) -> int:
+    """Parses the dashboard's ?quick_page= and clamps it into range.
+
+    Anything unreadable or out of range becomes the nearest real page rather
+    than an error or an empty card, so a hand-edited URL, or a bookmarked
+    page 4 that emptied out while the queue was worked down, still lands on
+    rows. Page numbers are 1-based, and an empty queue is still page 1.
+    """
+    try:
+        wanted = int(page)
+    except ValueError:
+        return 1
+    last = max(1, (total + QUICK_PAGE_SIZE - 1) // QUICK_PAGE_SIZE)
+    return max(1, min(wanted, last))
+
+
+def _quick_page_url(page: int, active_source: RequestSource | None) -> str:
+    """A dashboard URL for a Quick Actions page, keeping the source filter.
+
+    Anchored at the card so a pager click lands on the list it moved rather
+    than at the top of the dashboard.
+    """
+    params = f"quick_page={page}"
+    if active_source is not None:
+        params = f"source={active_source.value}&{params}"
+    return f"/dashboard?{params}#quick-actions"
+
+
 def _days_text(desired: date | None) -> str:
     if desired is None:
         return ""
@@ -148,6 +183,7 @@ def _row_ctx(req: RequestModel, settings_row: AppSettings) -> dict:
 def dashboard(
     request: Request,
     source: str = "",
+    quick_page: str = "",
     db: Session = Depends(get_db),
     settings_row: AppSettings = Depends(get_app_settings),
 ):
@@ -223,6 +259,14 @@ def dashboard(
         for s in RequestSource
     }
 
+    # Paged in Python rather than with LIMIT/OFFSET: the rows are already
+    # loaded for the count beside the heading, and a Quick Action queue this
+    # view is for never runs to the size where that matters.
+    quick_total = len(quick_pending)
+    quick_page_number = _quick_page(quick_page, quick_total)
+    quick_page_count = max(1, (quick_total + QUICK_PAGE_SIZE - 1) // QUICK_PAGE_SIZE)
+    quick_start = (quick_page_number - 1) * QUICK_PAGE_SIZE
+
     csrf_token = get_or_create_csrf_token(request)
     return render(
         request,
@@ -233,8 +277,16 @@ def dashboard(
             "submitted": [_row_ctx(r, settings_row) for r in submitted],
             "in_progress": [_row_ctx(r, settings_row) for r in in_progress],
             "queued": [_row_ctx(r, settings_row) for r in queued],
-            "quick_pending": quick_pending[:8],
-            "quick_pending_count": len(quick_pending),
+            "quick_pending": quick_pending[quick_start:quick_start + QUICK_PAGE_SIZE],
+            "quick_pending_count": quick_total,
+            "quick_page": quick_page_number,
+            "quick_page_count": quick_page_count,
+            "quick_first": quick_start + 1,
+            "quick_last": min(quick_start + QUICK_PAGE_SIZE, quick_total),
+            "quick_prev_url": _quick_page_url(quick_page_number - 1, active_source) if quick_page_number > 1 else "",
+            "quick_next_url": (
+                _quick_page_url(quick_page_number + 1, active_source) if quick_page_number < quick_page_count else ""
+            ),
             "needs_info": needs_info,
             "blocked": [
                 {"req": r, "overdue": r.blocked_until is not None and r.blocked_until <= date.today()}

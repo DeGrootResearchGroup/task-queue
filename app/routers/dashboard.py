@@ -2,7 +2,7 @@ from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import commit_and_refresh
@@ -54,6 +54,53 @@ def _get_request_or_404(db: Session, request_id: int) -> RequestModel:
     if req is None:
         raise HTTPException(status_code=404, detail="Request not found")
     return req
+
+
+def _others_awaiting_review(db: Session, req: RequestModel) -> int:
+    """How many *other* requests are awaiting review.
+
+    Excludes `req` whatever its status, so the number beside the triage button
+    reads the same before and after an action on this one: how many are left
+    after this page.
+    """
+    return db.scalar(
+        select(func.count())
+        .select_from(RequestModel)
+        .where(RequestModel.status == RequestStatus.submitted, RequestModel.id != req.id)
+    )
+
+
+def _next_submitted_id(db: Session, req: RequestModel) -> int | None:
+    """The next request awaiting review after `req`, or None if there is none.
+
+    Ordered by `created_at` like the dashboard's own Awaiting review list, so
+    triaging straight through here walks that list in the order it is shown.
+    `id` breaks ties, which the bulk email sweep produces routinely -- several
+    candidates POSTed in one run share a timestamp.
+
+    Wraps around to the oldest one still submitted when `req` is the last in
+    that order, so Skip on the final item does not dead-end: anything skipped
+    earlier in the pass comes back round. Once nothing else is submitted this
+    returns None and the button is not rendered at all.
+    """
+    base = select(RequestModel).where(
+        RequestModel.status == RequestStatus.submitted,
+        RequestModel.id != req.id,
+    )
+    after = db.scalars(
+        base.where(
+            or_(
+                RequestModel.created_at > req.created_at,
+                and_(RequestModel.created_at == req.created_at, RequestModel.id > req.id),
+            )
+        )
+        .order_by(RequestModel.created_at, RequestModel.id)
+        .limit(1)
+    ).first()
+    if after is not None:
+        return after.id
+    first = db.scalars(base.order_by(RequestModel.created_at, RequestModel.id).limit(1)).first()
+    return first.id if first is not None else None
 
 
 def _days_text(desired: date | None) -> str:
@@ -212,6 +259,12 @@ def request_detail(
             "req": req,
             "urgency": urgency_level(req.desired_completion_date, settings_row),
             "days_text": _days_text(req.desired_completion_date),
+            # Triage navigation: lets Accept/Decline/hold be followed by the
+            # next item without a detour through the dashboard. Computed on
+            # every detail view, not just while this one is submitted, so the
+            # button is already there on the page an action redirects back to.
+            "next_review_id": _next_submitted_id(db, req),
+            "others_awaiting_review": _others_awaiting_review(db, req),
         },
     )
 
